@@ -1,0 +1,35 @@
+# yamtrack-plus built from this checkout instead of the upstream image.
+#
+#   docker compose -f docker-compose.plus.yml up -d --build
+#
+# SECRET comes from YAMTRACK_SECRET in a local .env file (not committed).
+services:
+  yamtrack:
+    container_name: yamtrack-plus
+    build:
+      context: .
+      args:
+        VERSION: plus-dev
+    image: yamtrack-plus:local
+    restart: unless-stopped
+    depends_on:
+      - redis
+    environment:
+      - TZ=Europe/Berlin
+      - SECRET=${YAMTRACK_SECRET:?Set YAMTRACK_SECRET in .env}
+      - REDIS_URL=redis://redis:6379
+    volumes:
+      - yamtrack_plus_db:/yamtrack/db
+    ports:
+      - "8000:8000"
+
+  redis:
+    container_name: yamtrack-plus-redis
+    image: redis:8-alpine
+    restart: unless-stopped
+    volumes:
+      - yamtrack_plus_redis:/data
+
+volumes:
+  yamtrack_plus_db:
+  yamtrack_plus_redis:
