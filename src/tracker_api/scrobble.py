@@ -45,7 +45,7 @@ SCROBBLE_TYPES = (
     MediaTypes.MOVIE.value,
 )
 
-_signer = signing.TimestampSigner(salt="api.undo")
+_signer = signing.TimestampSigner(salt="tracker_api.undo")
 
 
 def _now():

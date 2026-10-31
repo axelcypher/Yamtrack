@@ -5,8 +5,8 @@ from django.contrib.auth import get_user_model
 from django.core import signing
 from django.utils import timezone
 
-from api import scrobble as scrobble_module
 from app.models import TV, Anime, Episode, Manga, Movie, Season, Status
+from tracker_api import scrobble as scrobble_module
 
 from .helpers import ApiTestCase, fake_metadata
 
@@ -14,17 +14,17 @@ from .helpers import ApiTestCase, fake_metadata
 @patch("events.tasks.reload_calendar.delay")
 @patch("app.providers.services.get_media_metadata", side_effect=fake_metadata)
 class ScrobbleTests(ApiTestCase):
-    """POST /api/v1/scrobble and /api/v1/undo."""
+    """POST /api/tracker/v1/scrobble and /api/tracker/v1/undo."""
 
     def scrobble(self, **data):
         """Post a scrobble and return the JSON response."""
-        response = self.post_json("/api/v1/scrobble", data)
+        response = self.post_json("/api/tracker/v1/scrobble", data)
         self.assertEqual(response.status_code, 200, response.content)
         return response.json()
 
     def undo(self, token):
         """Post an undo token."""
-        return self.post_json("/api/v1/undo", {"undo": token})
+        return self.post_json("/api/tracker/v1/undo", {"undo": token})
 
     def test_anime_progress_and_undo(self, *_mocks):
         """Anime progress moves forward, completes at the end and undoes cleanly."""
@@ -185,7 +185,7 @@ class ScrobbleTests(ApiTestCase):
     def test_unknown_episode(self, *_mocks):
         """Episodes the season does not have are rejected."""
         response = self.post_json(
-            "/api/v1/scrobble",
+            "/api/tracker/v1/scrobble",
             {
                 "media_type": "tv",
                 "source": "tmdb",
@@ -200,12 +200,12 @@ class ScrobbleTests(ApiTestCase):
     def test_validation(self, *_mocks):
         """Episodes and chapters need a positive unit number."""
         response = self.post_json(
-            "/api/v1/scrobble",
+            "/api/tracker/v1/scrobble",
             {"media_type": "anime", "source": "mal", "media_id": "1"},
         )
         self.assertEqual(response.status_code, 400)
         response = self.post_json(
-            "/api/v1/scrobble",
+            "/api/tracker/v1/scrobble",
             {"media_type": "game", "source": "igdb", "media_id": "1", "unit_number": 1},
         )
         self.assertEqual(response.status_code, 400)
@@ -217,7 +217,7 @@ class ScrobbleTests(ApiTestCase):
         )
         other = get_user_model().objects.create_user(username="other", password="12345")  # noqa: S106
         response = self.client.post(
-            "/api/v1/undo",
+            "/api/tracker/v1/undo",
             {"undo": result["undo"]},
             content_type="application/json",
             HTTP_AUTHORIZATION=f"Bearer {other.token}",
@@ -243,13 +243,13 @@ class ScrobbleTests(ApiTestCase):
     def test_progress_endpoint(self, *_mocks):
         """The progress endpoint reports untracked and tracked items."""
         response = self.get_json(
-            "/api/v1/progress",
+            "/api/tracker/v1/progress",
             {"media_type": "anime", "source": "mal", "media_id": "1"},
         )
         self.assertEqual(response.json(), {"tracked": False})
         self.scrobble(media_type="anime", source="mal", media_id="1", unit_number=2)
         data = self.get_json(
-            "/api/v1/progress",
+            "/api/tracker/v1/progress",
             {"media_type": "anime", "source": "mal", "media_id": "1"},
         ).json()
         self.assertEqual(
