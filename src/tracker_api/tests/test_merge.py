@@ -118,6 +118,19 @@ class MergeAnimeTvTests(ApiTestCase):
         )
         self.assertTrue(TV.objects.filter(user=self.user).exists())
 
+    def test_start_date_never_after_end_date(self, *_mocks):
+        """A completed entry keeps an empty start date over later TV dates."""
+        self.watch_tv(1, 1, 2)
+        self.watch(media_type="anime", source="mal", media_id=FRIEREN, unit_number=12)
+        finished = timezone.now() - timedelta(days=200)
+        Anime.objects.filter(user=self.user).update(start_date=None, end_date=finished)
+
+        self.run_merge("--apply")
+
+        anime = Anime.objects.get(user=self.user)
+        self.assertIsNone(anime.start_date)
+        self.assertEqual(anime.end_date, finished)
+
     def test_never_lowers_anime_progress(self, *_mocks):
         """An anime entry ahead of the TV side keeps its progress."""
         self.watch_tv(1, 1)

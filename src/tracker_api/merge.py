@@ -236,10 +236,14 @@ def _merge_into_existing(merge):
         anime.progress = merge.max_episode
         if anime.status == Status.PLANNING.value:
             anime.status = Status.IN_PROGRESS.value
-    if merge.dates and (
-        anime.start_date is None or min(merge.dates) < anime.start_date
+    earliest = min(merge.dates) if merge.dates else None
+    # TV dates can be import timestamps; never start an entry after it ended.
+    if (
+        earliest
+        and (anime.start_date is None or earliest < anime.start_date)
+        and (anime.end_date is None or earliest <= anime.end_date)
     ):
-        anime.start_date = min(merge.dates)
+        anime.start_date = earliest
     if anime.score is None:
         anime.score = _first(part.score for part in merge.parts)
     anime.notes = _notes(merge, anime.notes)
