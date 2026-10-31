@@ -93,7 +93,7 @@ class ResolveTests(ApiTestCase):
         return_value=("52991", 7),
     )
     def test_tmdb_show_maps_to_anime(self, mock_tvdb, *_mocks):
-        """A TMDB show with an AniBridge mapping becomes the MAL entry."""
+        """Without a TMDB entry in AniBridge the TVDB entry is the fallback."""
         data = self.resolve(
             kind="episode",
             title="Frieren",
@@ -104,6 +104,24 @@ class ResolveTests(ApiTestCase):
         self.assertEqual(data["target"]["media_type"], "anime")
         self.assertEqual(data["target"]["unit_number"], 7)
         mock_tvdb.assert_called_once_with({}, 81189, 1, 7)
+
+    @patch("tracker_api.resolve.tmdb.tv", return_value=TV_META)
+    @patch("tracker_api.resolve.anime_mappings.get_mal_id_from_tvdb")
+    def test_tmdb_entry_wins_over_tvdb(self, mock_tvdb, _tv, _metadata, mock_mapping):
+        """AniBridge's TMDB entries are used first, matching TMDB numbering."""
+        mock_mapping.return_value = {
+            "tmdb_show:37854:s22": {"mal:21": {"1089-": "1089-"}}
+        }
+        data = self.resolve(
+            kind="episode",
+            title="One Piece",
+            season=22,
+            episode=1100,
+            ids={"tmdb_show": "37854"},
+        )
+        self.assertEqual(data["target"]["media_id"], "21")
+        self.assertEqual(data["target"]["unit_number"], 1100)
+        mock_tvdb.assert_not_called()
 
     @patch("tracker_api.resolve.tmdb.tv", return_value=TV_META)
     @patch(

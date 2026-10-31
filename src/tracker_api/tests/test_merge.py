@@ -12,9 +12,9 @@ from .helpers import ApiTestCase, fake_metadata
 FRIEREN = "52991"
 
 
-def fake_tvdb_mapping(_mapping, tvdb_id, season, episode):
+def fake_tmdb_mapping(_mapping, tmdb_id, season, episode):
     """Map season 1 to Frieren and season 2 episodes to MAL eps 10-12."""
-    del tvdb_id
+    del tmdb_id
     if season == 1 and episode <= 2:  # noqa: PLR2004
         return FRIEREN, episode
     if season == 2:  # noqa: PLR2004
@@ -22,8 +22,7 @@ def fake_tvdb_mapping(_mapping, tvdb_id, season, episode):
     return None, None
 
 
-@patch("tracker_api.merge.anime_mappings.get_mal_id_from_tvdb", fake_tvdb_mapping)
-@patch("tracker_api.merge.tmdb.tv", return_value={"tvdb_id": 81189})
+@patch("tracker_api.merge.mal_from_tmdb_show", fake_tmdb_mapping)
 @patch("events.tasks.reload_calendar.delay")
 @patch("app.providers.services.get_media_metadata", side_effect=fake_metadata)
 class MergeAnimeTvTests(ApiTestCase):

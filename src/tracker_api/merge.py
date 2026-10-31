@@ -1,9 +1,9 @@
 """Merge anime that are tracked as TMDB TV shows into the user's anime entries.
 
-Watched episodes are mapped through AniBridge (TVDB season/episode → MAL
-entry/episode), the same data the media server webhooks use. A TV season or
-show is only removed when everything in it was mapped and merged; anything
-AniBridge cannot map stays where it is.
+Watched episodes are mapped through AniBridge's TMDB entries (TMDB
+season/episode → MAL entry/episode), matching the numbering Yamtrack stores.
+A TV season or show is only removed when everything in it was mapped and
+merged; anything AniBridge cannot map stays where it is.
 """
 
 import logging
@@ -14,8 +14,9 @@ from django.db import transaction
 from simple_history.utils import bulk_update_with_history
 
 from app.models import TV, Anime, Item, MediaTypes, Sources, Status
-from app.providers import services, tmdb
-from integrations.webhooks import anime_mappings
+from app.providers import services
+
+from .mappings import mal_from_tmdb_show
 
 logger = logging.getLogger(__name__)
 
@@ -69,14 +70,6 @@ class MergePlan:
     delete_tvs: list = field(default_factory=list)
 
 
-def _tvdb_id(tv):
-    try:
-        return tmdb.tv(tv.item.media_id).get("tvdb_id")
-    except services.ProviderAPIError:
-        logger.warning("Could not load TMDB metadata for %s", tv.item)
-        return None
-
-
 def _newest_anime(user, mal_id):
     return (
         Anime.objects.filter(
@@ -107,26 +100,25 @@ class _Planner:
             )
         return self.candidates[mal_id]
 
-    def map_show(self, tv, tvdb_id, seasons):
+    def map_show(self, tv, seasons):
+        tmdb_id = tv.item.media_id
         if not seasons:
             # A planned show without seasons: its first episode decides.
-            mal_id, _ = anime_mappings.get_mal_id_from_tvdb(self.mapping, tvdb_id, 1, 1)
+            mal_id, _ = mal_from_tmdb_show(self.mapping, tmdb_id, 1, 1)
             if mal_id:
                 self.candidate(mal_id).add_part(tv, tv.item.title)
                 self.targets[("tv", tv.pk)].add(str(mal_id))
             return
         for season in seasons:
-            self.map_season(tv, tvdb_id, season)
+            self.map_season(tv, tmdb_id, season)
 
-    def map_season(self, tv, tvdb_id, season):
+    def map_season(self, tv, tmdb_id, season):
         key = ("season", season.pk)
         number = season.item.season_number
         label = f"{tv.item.title} S{number}"
         episodes = list(season.episodes.select_related("item"))
         if not episodes:
-            mal_id, _ = anime_mappings.get_mal_id_from_tvdb(
-                self.mapping, tvdb_id, number, 1
-            )
+            mal_id, _ = mal_from_tmdb_show(self.mapping, tmdb_id, number, 1)
             if mal_id:
                 self.candidate(mal_id).add_part(season, label)
                 self.targets[key].add(str(mal_id))
@@ -134,8 +126,8 @@ class _Planner:
                 self.incomplete.add(key)
             return
         for episode in episodes:
-            mal_id, mal_episode = anime_mappings.get_mal_id_from_tvdb(
-                self.mapping, tvdb_id, number, episode.item.episode_number
+            mal_id, mal_episode = mal_from_tmdb_show(
+                self.mapping, tmdb_id, number, episode.item.episode_number
             )
             if not (mal_id and mal_episode):
                 self.incomplete.add(key)
@@ -165,11 +157,8 @@ def build_plan(user, mapping, *, include_tv_only=False):
         "item"
     )
     for tv in tvs:
-        tvdb_id = _tvdb_id(tv)
-        if not tvdb_id:
-            continue
         seasons = list(tv.seasons.select_related("item", "related_tv"))
-        planner.map_show(tv, tvdb_id, seasons)
+        planner.map_show(tv, seasons)
         shows.append((tv, seasons))
 
     plan = MergePlan(user=user)

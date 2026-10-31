@@ -14,6 +14,7 @@ from app.providers import services, tmdb, tvdb
 from integrations.webhooks import anime_mappings
 
 from .auth import ApiError
+from .mappings import mal_from_tmdb_show
 
 logger = logging.getLogger(__name__)
 
@@ -218,14 +219,22 @@ class Resolver:
         return self._from_tmdb_show(results[0]["id"], self.season, self.episode)
 
     def _from_tmdb_show(self, show_id, season, episode):
-        """TV target, or the MAL entry AniBridge maps this season/episode to."""
+        """TV target, or the MAL entry AniBridge maps this season/episode to.
+
+        AniBridge's TMDB entries match TMDB numbering; the TVDB ones are only a
+        fallback for shows AniBridge has no TMDB entry for.
+        """
         metadata = tmdb.tv(str(show_id))
         season = season if season is not None else 1
-        tvdb_id = metadata.get("tvdb_id")
-        if self.user.anime_enabled and tvdb_id and episode is not None:
-            mal_id, mal_episode = anime_mappings.get_mal_id_from_tvdb(
-                self.mapping(), tvdb_id, season, episode
+        if self.user.anime_enabled and episode is not None:
+            mal_id, mal_episode = mal_from_tmdb_show(
+                self.mapping(), show_id, season, episode
             )
+            tvdb_id = metadata.get("tvdb_id")
+            if not mal_id and tvdb_id:
+                mal_id, mal_episode = anime_mappings.get_mal_id_from_tvdb(
+                    self.mapping(), tvdb_id, season, episode
+                )
             if mal_id:
                 return _mal_target(MediaTypes.ANIME.value, mal_id, mal_episode)
         return _tv_target(show_id, season, episode, metadata)
