@@ -1,0 +1,69 @@
+name: Docker Image (plus)
+
+# yamtrack-plus image: ghcr.io/<owner>/yamtrack:plus from the plus/api branch.
+# Kept separate from docker-image.yml so upstream changes merge cleanly.
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - "plus/api"
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0 # git describe needs the tags
+
+      - name: Get version from git
+        id: get-version
+        run: |
+          VERSION="$(git describe --tags 2>/dev/null || echo dev)-plus"
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+          echo "Using version: $VERSION"
+
+      - name: Setup Docker buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v4
+
+      - name: Extract Docker metadata tags
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=plus
+            type=sha,prefix=plus-
+
+      - name: Log into registry ${{ env.REGISTRY }}
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=plus
+          cache-to: type=gha,mode=max,scope=plus
+          provenance: false
+          platforms: linux/amd64,linux/arm64
+          build-args: |
+            VERSION=${{ steps.get-version.outputs.VERSION }}
