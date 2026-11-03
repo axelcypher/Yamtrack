@@ -25,6 +25,8 @@ def fake_metadata(
         return {"title": f"A {media_type}", "image": "a.jpg", "max_progress": 12}
     if media_type == "movie":
         return {"title": "A movie", "image": "m.jpg", "max_progress": 1}
+    if media_type == "game":
+        return {"title": "A game", "image": "g.jpg", "max_progress": None}
     if media_type == "tv":
         return {
             "title": "Show",

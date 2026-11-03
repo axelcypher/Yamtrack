@@ -26,7 +26,8 @@ class ApiAuthTests(ApiTestCase):
         response = self.get_json("/api/tracker/v1/me")
         self.assertEqual(response.status_code, 200)
         data = response.json()
-        self.assertEqual(data["api_version"], 1)
+        self.assertEqual(data["api_version"], 2)
+        self.assertIn("game", data["scrobble_types"])
         self.assertEqual(data["username"], "tracker")
         self.assertIn("anime", data["enabled_media_types"])
 
@@ -85,6 +86,6 @@ class ApiAuthTests(ApiTestCase):
     def test_search_validates_type(self):
         """Unsupported media types are rejected."""
         response = self.get_json(
-            "/api/tracker/v1/search", {"media_type": "game", "q": "x"}
+            "/api/tracker/v1/search", {"media_type": "boardgame", "q": "x"}
         )
         self.assertEqual(response.status_code, 400)

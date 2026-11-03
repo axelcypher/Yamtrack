@@ -73,6 +73,8 @@ def api_view(methods):
             except ApiError as error:
                 return error_response(error.status, error.code, error.detail)
             except services.ProviderAPIError as error:
+                if error.status_code == 404:  # noqa: PLR2004
+                    return error_response(404, "unknown_media", str(error))
                 logger.warning("Provider error in API request: %s", error)
                 return error_response(502, "provider_error", str(error))
 

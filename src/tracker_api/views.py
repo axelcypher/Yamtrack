@@ -10,12 +10,14 @@ from . import scrobble as scrobble_service
 from .auth import ApiError, api_view, json_body
 from .resolve import Resolver
 
-API_VERSION = 1
+# 2: game scrobbling (session minutes), usage data, ``scrobble_types`` in me
+API_VERSION = 2
 SEARCH_TYPES = (
     MediaTypes.ANIME.value,
     MediaTypes.MANGA.value,
     MediaTypes.TV.value,
     MediaTypes.MOVIE.value,
+    MediaTypes.GAME.value,
 )
 
 
@@ -28,6 +30,7 @@ def me(request):
             "api_version": API_VERSION,
             "username": user.username,
             "enabled_media_types": user.get_enabled_media_types(),
+            "scrobble_types": scrobble_service.enabled_scrobble_types(user),
             "anime_enabled": user.anime_enabled,
         }
     )

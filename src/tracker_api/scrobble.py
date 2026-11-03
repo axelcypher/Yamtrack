@@ -1,8 +1,10 @@
 """Record a watched episode, chapter or movie, and undo it again.
 
 Progress only moves forward: a unit that is already recorded is reported as
-``already_tracked`` instead of being written twice. Every write is captured in
-a signed undo token so the extension can revert exactly what it changed.
+``already_tracked`` instead of being written twice. Games are scrobbled as
+cumulative minutes per play session; only the difference to what the session
+already reported is added. Every write is captured in a signed undo token so
+the client can revert exactly what it changed.
 """
 
 import logging
@@ -18,6 +20,7 @@ from app.models import (
     TV,
     Anime,
     Episode,
+    Game,
     Item,
     Manga,
     MediaTypes,
@@ -28,6 +31,7 @@ from app.models import (
 from app.providers import services
 
 from .auth import ApiError
+from .models import ScrobbleSession, UsageEvent
 
 logger = logging.getLogger(__name__)
 
@@ -35,15 +39,37 @@ UNDO_MAX_AGE = 60 * 60
 # A completed movie seen again this soon is the same viewing, not a rewatch.
 MOVIE_REWATCH_GAP = timedelta(hours=6)
 MEDIA_FIELDS = ("progress", "status", "start_date", "end_date")
-DATE_FIELDS = ("start_date", "end_date")
-MODELS = {model.__name__: model for model in (TV, Season, Episode, Anime, Manga, Movie)}
+DATE_FIELDS = ("start_date", "end_date", "started_at", "ended_at")
+MODELS = {
+    model.__name__: model
+    for model in (
+        TV,
+        Season,
+        Episode,
+        Anime,
+        Manga,
+        Movie,
+        Game,
+        ScrobbleSession,
+        UsageEvent,
+    )
+}
 PROGRESS_MODELS = {MediaTypes.ANIME.value: Anime, MediaTypes.MANGA.value: Manga}
+ENTRY_MODELS = {
+    **PROGRESS_MODELS,
+    MediaTypes.MOVIE.value: Movie,
+    MediaTypes.GAME.value: Game,
+}
 SCROBBLE_TYPES = (
     MediaTypes.TV.value,
     MediaTypes.ANIME.value,
     MediaTypes.MANGA.value,
     MediaTypes.MOVIE.value,
+    MediaTypes.GAME.value,
 )
+# Statuses a new report moves back to "In progress".
+RESUMABLE = (Status.PLANNING.value, Status.PAUSED.value, Status.DROPPED.value)
+MAX_USAGE_MINUTES = 24 * 60
 
 _signer = signing.TimestampSigner(salt="tracker_api.undo")
 
@@ -88,6 +114,30 @@ class ChangeSet:
         )
 
 
+def _datetime(value, field):
+    if value in (None, ""):
+        return None
+    parsed = parse_datetime(str(value))
+    if parsed is None:
+        raise ApiError(400, "invalid_date", f"{field} must be an ISO 8601 datetime")
+    if timezone.is_naive(parsed):
+        parsed = timezone.make_aware(parsed, timezone.UTC)
+    return parsed
+
+
+def _text(value, max_length):
+    return str(value or "").strip()[:max_length]
+
+
+def enabled_scrobble_types(user):
+    """Scrobble types the user has not switched off in Yamtrack."""
+    return [
+        media_type
+        for media_type in SCROBBLE_TYPES
+        if getattr(user, f"{media_type}_enabled", True)
+    ]
+
+
 def _snapshot(instance, fields):
     return {field: getattr(instance, field) for field in fields}
 
@@ -117,22 +167,33 @@ def scrobble(user, data):
         raise ApiError(400, "invalid_media_type")
     if not source or not media_id:
         raise ApiError(400, "invalid_target", "source and media_id are required")
-    if media_type != MediaTypes.MOVIE.value and (unit is None or unit < 1):
+    if media_type not in enabled_scrobble_types(user):
+        raise ApiError(403, "media_type_disabled", f"{media_type} is turned off")
+    if media_type not in (MediaTypes.MOVIE.value, MediaTypes.GAME.value) and (
+        unit is None or unit < 1
+    ):
         raise ApiError(400, "invalid_unit", "unit_number must be a positive integer")
 
+    usage = data.get("usage") if isinstance(data.get("usage"), dict) else {}
     changes = ChangeSet()
     with transaction.atomic():
-        if media_type == MediaTypes.TV.value:
-            season_number = season_number if season_number is not None else 1
-            applied = _scrobble_episode(
-                user, source, media_id, season_number, unit, changes
-            )
-        elif media_type == MediaTypes.MOVIE.value:
-            applied = _scrobble_movie(user, source, media_id, changes)
+        if media_type == MediaTypes.GAME.value:
+            applied = _scrobble_game(user, source, media_id, data, usage, changes)
         else:
-            applied = _scrobble_progress(
-                user, media_type, source, media_id, unit, changes
-            )
+            if media_type == MediaTypes.TV.value:
+                season_number = season_number if season_number is not None else 1
+                item = _scrobble_episode(
+                    user, source, media_id, season_number, unit, changes
+                )
+            elif media_type == MediaTypes.MOVIE.value:
+                item = _scrobble_movie(user, source, media_id, changes)
+            else:
+                item = _scrobble_progress(
+                    user, media_type, source, media_id, unit, changes
+                )
+            applied = item is not None
+            if applied:
+                _record_usage(user, item, media_type, usage, changes, units=1)
 
     return {
         "applied": applied,
@@ -172,7 +233,7 @@ def _scrobble_episode(user, source, media_id, season_number, episode_number, cha
             item__episode_number=episode_number,
         ).exists()
     ):
-        return False
+        return None
 
     tv_before = tv.status if tv else None
     seasons_before = (
@@ -205,7 +266,7 @@ def _scrobble_episode(user, source, media_id, season_number, episode_number, cha
 
     _record_tv_changes(changes, tv, tv_before, seasons_before)
     changes.add_created(episode)
-    return True
+    return tv_item
 
 
 def _record_tv_changes(changes, tv, tv_before, seasons_before):
@@ -241,12 +302,12 @@ def _scrobble_progress(user, media_type, source, media_id, unit, changes):
 
     if instance and instance.status == Status.COMPLETED.value:
         if unit != 1:
-            return False
+            return None
         instance = None  # starting over: a new instance, like the webhooks do
 
     if instance:
         if instance.progress >= unit:
-            return False
+            return None
         changes.add_updated(instance, _snapshot(instance, MEDIA_FIELDS))
         if instance.status != Status.IN_PROGRESS.value:
             instance.status = Status.IN_PROGRESS.value
@@ -263,7 +324,7 @@ def _scrobble_progress(user, media_type, source, media_id, unit, changes):
             start_date=_now(),
         )
         changes.add_created(instance)
-    return True
+    return item
 
 
 def _scrobble_movie(user, source, media_id, changes):
@@ -276,7 +337,7 @@ def _scrobble_movie(user, source, media_id, changes):
 
     if instance and instance.status == Status.COMPLETED.value:
         if instance.end_date and now - instance.end_date < MOVIE_REWATCH_GAP:
-            return False
+            return None
         instance = None
 
     if instance:
@@ -294,7 +355,111 @@ def _scrobble_movie(user, source, media_id, changes):
             end_date=now,
         )
         changes.add_created(instance)
+    return item
+
+
+def _scrobble_game(user, source, media_id, data, usage, changes):
+    """Add the minutes a play session reported since its last report."""
+    session_id = _text(data.get("session_id"), 64)
+    minutes = _int(data.get("minutes"))
+    if not session_id:
+        raise ApiError(400, "invalid_unit", "session_id is required")
+    if minutes is None or minutes < 1:
+        raise ApiError(400, "invalid_unit", "minutes must be a positive integer")
+    started_at = _datetime(data.get("started_at"), "started_at")
+    ended_at = _datetime(data.get("ended_at"), "ended_at")
+    client = _text(data.get("client") or usage.get("client"), 32)
+
+    metadata = services.get_media_metadata(MediaTypes.GAME.value, media_id, source)
+    item = _get_or_create_item(MediaTypes.GAME.value, source, media_id, metadata)
+
+    session = (
+        ScrobbleSession.objects.select_for_update()
+        .filter(user=user, session_id=session_id)
+        .first()
+    )
+    if session and session.item_id != item.id:
+        raise ApiError(400, "session_conflict", "session_id belongs to another game")
+    delta = minutes - (session.minutes_counted if session else 0)
+    if delta <= 0:
+        return False
+
+    if session:
+        changes.add_updated(
+            session,
+            {"minutes_counted": session.minutes_counted, "ended_at": session.ended_at},
+        )
+        session.minutes_counted = minutes
+        session.ended_at = ended_at or session.ended_at
+        session.save(update_fields=["minutes_counted", "ended_at"])
+    else:
+        session = ScrobbleSession.objects.create(
+            user=user,
+            session_id=session_id,
+            item=item,
+            client=client,
+            minutes_counted=minutes,
+            started_at=started_at,
+            ended_at=ended_at,
+        )
+        changes.add_created(session)
+
+    game = Game.objects.filter(item=item, user=user).order_by("-created_at").first()
+    if game:
+        changes.add_updated(game, _snapshot(game, MEDIA_FIELDS))
+        if game.status in RESUMABLE:
+            game.status = Status.IN_PROGRESS.value
+            game.start_date = game.start_date or started_at or _now()
+        game.progress += delta
+        game.save()
+    else:
+        game = Game.objects.create(
+            item=item,
+            user=user,
+            progress=delta,
+            status=Status.IN_PROGRESS.value,
+            start_date=started_at or _now(),
+        )
+        changes.add_created(game)
+
+    _record_usage(
+        user,
+        item,
+        MediaTypes.GAME.value,
+        {**usage, "client": client, "minutes": delta},
+        changes,
+        units=0,
+        occurred_at=ended_at,
+        session_id=session_id,
+    )
     return True
+
+
+def _record_usage(  # noqa: PLR0913
+    user,
+    item,
+    media_type,
+    usage,
+    changes,
+    *,
+    units,
+    occurred_at=None,
+    session_id="",
+):
+    """Store one usage event for the statistics (client, platform, minutes)."""
+    minutes = _int(usage.get("minutes")) or 0
+    event = UsageEvent.objects.create(
+        user=user,
+        item=item,
+        media_type=media_type,
+        client=_text(usage.get("client"), 32),
+        platform=_text(usage.get("platform"), 64),
+        units=units,
+        minutes=max(0, min(minutes, MAX_USAGE_MINUTES)),
+        occurred_at=occurred_at or timezone.now(),
+        session_id=session_id,
+    )
+    changes.add_created(event)
 
 
 def undo(user, token):
@@ -320,21 +485,27 @@ def undo(user, token):
             if obj:
                 obj.delete()
         for model_name, pk, previous in data["updated"]:
-            model = MODELS[model_name]
-            obj = model.objects.filter(pk=pk, **_owner(model_name, user)).first()
-            if not obj:
-                continue
-            for field, value in previous.items():
-                setattr(
-                    obj,
-                    field,
-                    parse_datetime(value) if field in DATE_FIELDS and value else value,
-                )
-            bulk_update_with_history(
-                [obj], model, fields=list(previous), default_user=user
-            )
+            _restore(user, model_name, pk, previous)
     logger.info("Undid API scrobble for %s", user)
     return {"undone": True}
+
+
+def _restore(user, model_name, pk, previous):
+    """Write the previous field values back, with history where the model has it."""
+    model = MODELS[model_name]
+    obj = model.objects.filter(pk=pk, **_owner(model_name, user)).first()
+    if not obj:
+        return
+    for field, value in previous.items():
+        setattr(
+            obj,
+            field,
+            parse_datetime(value) if field in DATE_FIELDS and value else value,
+        )
+    if hasattr(model, "history"):
+        bulk_update_with_history([obj], model, fields=list(previous), default_user=user)
+    else:
+        obj.save(update_fields=list(previous))
 
 
 def _owner(model_name, user):
@@ -348,9 +519,7 @@ def progress_state(user, media_type, source, media_id, season_number=None):
     if media_type == MediaTypes.TV.value:
         return _tv_state(user, source, media_id, season_number)
 
-    model = PROGRESS_MODELS.get(media_type) or (
-        Movie if media_type == MediaTypes.MOVIE.value else None
-    )
+    model = ENTRY_MODELS.get(media_type)
     if model is None:
         raise ApiError(400, "invalid_media_type")
     instance = (
@@ -372,6 +541,8 @@ def progress_state(user, media_type, source, media_id, season_number=None):
         "progress": instance.progress,
         "max_progress": metadata.get("max_progress"),
         "score": float(instance.score) if instance.score is not None else None,
+        "start_date": instance.start_date.isoformat() if instance.start_date else None,
+        "end_date": instance.end_date.isoformat() if instance.end_date else None,
     }
 
 
