@@ -301,6 +301,10 @@
           </div>
         {% endif %}
 
+        {# yamtrack-plus: linked anime / TV entry #}
+        {% load tracker_tags %}
+        {% linked_entry media %}
+
         {# Actions #}
         <h2 class="text-xl font-bold mb-4">{% trans "Actions" %}</h2>
         <div class="bg-[#2a2f35] rounded-lg overflow-hidden divide-y divide-white/5 mb-6">

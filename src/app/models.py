@@ -231,6 +231,11 @@ class MediaManager(models.Manager):
         model = apps.get_model(app_label="app", model_name=media_type)
         queryset = model.objects.filter(user=user.id)
 
+        # yamtrack-plus: TV shows linked to an anime entry are listed as anime
+        from tracker_api import hooks as plus_hooks  # noqa: PLC0415
+
+        queryset = plus_hooks.exclude_linked_tv(queryset, user, media_type)
+
         if status_filter != users.models.MediaStatusChoices.ALL:
             queryset = queryset.filter(status=status_filter)
 

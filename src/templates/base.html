@@ -146,6 +146,20 @@
                     </a>
                   </li>
 
+                  {# yamtrack-plus: usage statistics #}
+                  {% url 'usage_statistics' as usage_url %}
+                  <li>
+                    <a href="{{ usage_url }}"
+                       class="flex items-center space-x-3 px-4 py-2 rounded-md transition-colors duration-200 text-sm {% if request.path == usage_url %}text-white bg-[#2c3136]{% else %}text-gray-400 hover:text-white hover:bg-[#23272b]{% endif %}">
+                      {% if request.path|str_equals:usage_url %}
+                        {% include "app/icons/bars-pyramid.svg" with classes="w-5 h-5 text-indigo-400 " %}
+                      {% else %}
+                        {% include "app/icons/bars-pyramid.svg" with classes="w-5 h-5" %}
+                      {% endif %}
+                      <span>{% trans "Usage" %}</span>
+                    </a>
+                  </li>
+
                   {% url 'journal' as journal_url %}
                   <li>
                     <a href="{{ journal_url }}"

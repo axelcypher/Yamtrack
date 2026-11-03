@@ -61,3 +61,44 @@ class UsageEvent(models.Model):
     def __str__(self):
         """Return what was used and when."""
         return f"{self.item} on {self.platform or self.client} at {self.occurred_at}"
+
+
+class AnimeTvLink(models.Model):
+    """A user's TMDB TV show that is the same anime as one of their MAL entries.
+
+    Both entries stay: each may be the only one with a release calendar. The
+    link hides the TV show in lists, the home page and duplicate calendar
+    events, and keeps progress in sync (see ``tracker_api.sync``).
+    """
+
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    tv = models.ForeignKey("app.TV", on_delete=models.CASCADE, related_name="+")
+    anime_item = models.ForeignKey(Item, on_delete=models.CASCADE, related_name="+")
+    seasons = models.JSONField(default=list)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        """Meta options for the model."""
+
+        constraints = [
+            models.UniqueConstraint(
+                fields=["tv", "anime_item"], name="tracker_link_unique_tv_anime"
+            )
+        ]
+
+    def __str__(self):
+        """Return both titles."""
+        return f"{self.tv} <-> {self.anime_item}"
+
+
+class ItemFacts(models.Model):
+    """Genres and runtime of an item, cached from provider metadata for stats."""
+
+    item = models.OneToOneField(Item, on_delete=models.CASCADE, related_name="+")
+    genres = models.JSONField(default=list)
+    runtime_minutes = models.PositiveIntegerField(null=True, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        """Return the item and its runtime."""
+        return f"{self.item} ({self.runtime_minutes} min)"

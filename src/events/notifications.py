@@ -195,6 +195,12 @@ def get_user_releases(users, target_events):
             ):
                 user_events.append(event)
 
+        # yamtrack-plus: one notification for anime tracked as TV and anime
+        from tracker_api import hooks as plus_hooks  # noqa: PLC0415
+
+        duplicates = set(plus_hooks.duplicate_tv_event_ids(user, user_events))
+        user_events = [event for event in user_events if event.id not in duplicates]
+
         if user_events:
             user_releases[user.id] = user_events
 

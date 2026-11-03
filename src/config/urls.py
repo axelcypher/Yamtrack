@@ -31,6 +31,7 @@ urlpatterns = [
         name="javascript-catalog",
     ),
     path("api/tracker/v1/", include("tracker_api.urls")),
+    path("tracker/", include("tracker_api.page_urls")),
     path("", include("app.urls")),
     path("", include("integrations.urls")),
     path("", include("users.urls")),

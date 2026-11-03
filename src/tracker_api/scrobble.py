@@ -30,6 +30,7 @@ from app.models import (
 )
 from app.providers import services
 
+from . import sync
 from .auth import ApiError
 from .models import ScrobbleSession, UsageEvent
 
@@ -162,6 +163,8 @@ def scrobble(user, data):
     media_id = str(data.get("media_id") or "")
     unit = _int(data.get("unit_number"))
     season_number = _int(data.get("season_number"))
+    if media_type == MediaTypes.TV.value and season_number is None:
+        season_number = 1
 
     if media_type not in SCROBBLE_TYPES:
         raise ApiError(400, "invalid_media_type")
@@ -176,24 +179,27 @@ def scrobble(user, data):
 
     usage = data.get("usage") if isinstance(data.get("usage"), dict) else {}
     changes = ChangeSet()
-    with transaction.atomic():
-        if media_type == MediaTypes.GAME.value:
-            applied = _scrobble_game(user, source, media_id, data, usage, changes)
-        else:
-            if media_type == MediaTypes.TV.value:
-                season_number = season_number if season_number is not None else 1
-                item = _scrobble_episode(
-                    user, source, media_id, season_number, unit, changes
-                )
-            elif media_type == MediaTypes.MOVIE.value:
-                item = _scrobble_movie(user, source, media_id, changes)
+    # Mirrored writes on a linked TV show or anime land in the same undo token.
+    sink = sync.change_sink.set(changes)
+    try:
+        with transaction.atomic():
+            if media_type == MediaTypes.GAME.value:
+                applied = _scrobble_game(user, source, media_id, data, usage, changes)
             else:
-                item = _scrobble_progress(
-                    user, media_type, source, media_id, unit, changes
+                item = _scrobble_unit(
+                    user,
+                    media_type,
+                    source,
+                    media_id,
+                    season_number=season_number,
+                    unit=unit,
+                    changes=changes,
                 )
-            applied = item is not None
-            if applied:
-                _record_usage(user, item, media_type, usage, changes, units=1)
+                applied = item is not None
+                if applied:
+                    _record_usage(user, item, media_type, usage, changes, units=1)
+    finally:
+        sync.change_sink.reset(sink)
 
     return {
         "applied": applied,
@@ -201,6 +207,15 @@ def scrobble(user, data):
         "state": progress_state(user, media_type, source, media_id, season_number),
         "undo": changes.token(user) if applied else None,
     }
+
+
+def _scrobble_unit(user, media_type, source, media_id, *, season_number, unit, changes):
+    """Record an episode, chapter or movie; returns its item, or None if tracked."""
+    if media_type == MediaTypes.TV.value:
+        return _scrobble_episode(user, source, media_id, season_number, unit, changes)
+    if media_type == MediaTypes.MOVIE.value:
+        return _scrobble_movie(user, source, media_id, changes)
+    return _scrobble_progress(user, media_type, source, media_id, unit, changes)
 
 
 def _scrobble_episode(user, source, media_id, season_number, episode_number, changes):

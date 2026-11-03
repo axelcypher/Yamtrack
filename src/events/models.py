@@ -119,6 +119,13 @@ class EventManager(models.Manager):
             datetime__lte=end_datetime,
         ).select_related("item")
 
+        # yamtrack-plus: one entry per release for anime tracked as TV and anime
+        from tracker_api import hooks as plus_hooks  # noqa: PLC0415
+
+        queryset = queryset.exclude(
+            id__in=plus_hooks.duplicate_tv_event_ids(user, queryset),
+        )
+
         return self.sort_with_sentinel_last(queryset)
 
     def _build_tv_query(self, user, enabled_types):

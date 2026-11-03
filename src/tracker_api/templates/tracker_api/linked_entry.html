@@ -1,0 +1,19 @@
+{% load i18n app_tags %}
+{% if entries %}
+  <h2 class="text-xl font-bold mb-4">{% trans "Also tracked as" %}</h2>
+  <div class="bg-[#2a2f35] rounded-lg overflow-hidden divide-y divide-white/5 mb-6">
+    {% for entry in entries %}
+      <a href="{{ entry.item|media_url }}"
+         class="flex items-center gap-x-3 px-4 py-3 text-sm text-gray-200 hover:bg-[#343a40] transition-colors duration-200">
+        <span class="text-xs uppercase tracking-wide text-indigo-400 w-12 shrink-0">
+          {% if entry.kind == "anime" %}
+            {% trans "Anime" %}
+          {% else %}
+            {% trans "TV" %}
+          {% endif %}
+        </span>
+        <span class="truncate">{{ entry.item.title }}</span>
+      </a>
+    {% endfor %}
+  </div>
+{% endif %}
