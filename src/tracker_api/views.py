@@ -1,17 +1,23 @@
 """JSON endpoints used by the yamtrack-tracker browser extension."""
 
+import datetime
+
 from django.apps import apps
 from django.http import JsonResponse
+from django.utils import timezone
+from django.utils.dateparse import parse_date
 
 from app.models import MediaTypes
 from app.providers import services
 
+from . import activity as activity_service
 from . import scrobble as scrobble_service
 from .auth import ApiError, api_view, json_body
 from .resolve import Resolver
 
 # 2: game scrobbling (session minutes), usage data, ``scrobble_types`` in me
-API_VERSION = 2
+# 3: ``activity`` (progress per item in a date range)
+API_VERSION = 3
 SEARCH_TYPES = (
     MediaTypes.ANIME.value,
     MediaTypes.MANGA.value,
@@ -119,6 +125,39 @@ def progress(request):
             media_id,
             int(season) if season and season.isdigit() else None,
         )
+    )
+
+
+def _date_param(request, name):
+    try:
+        value = parse_date(request.GET.get(name) or "")
+    except ValueError:  # well formed but not a real date, e.g. 2026-02-30
+        value = None
+    if value is None:
+        raise ApiError(400, "invalid_date", f"{name} must be YYYY-MM-DD")
+    return value
+
+
+@api_view(["GET"])
+def activity(request):
+    """Return the progress per item between two days (both included)."""
+    media_type = request.GET.get("media_type")
+    if media_type not in activity_service.UNITS:
+        raise ApiError(400, "invalid_media_type")
+    since = _date_param(request, "since")
+    until = _date_param(request, "until")
+    if since > until:
+        raise ApiError(400, "invalid_date", "since must not be after until")
+
+    start = timezone.make_aware(datetime.datetime.combine(since, datetime.time.min))
+    end = timezone.make_aware(datetime.datetime.combine(until, datetime.time.max))
+    return JsonResponse(
+        {
+            "media_type": media_type,
+            "since": since.isoformat(),
+            "until": until.isoformat(),
+            "items": activity_service.activity(request.user, media_type, start, end),
+        }
     )
 
 

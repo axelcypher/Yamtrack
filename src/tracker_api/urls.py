@@ -7,6 +7,7 @@ urlpatterns = [
     path("search", views.search, name="tracker_api_search"),
     path("resolve", views.resolve, name="tracker_api_resolve"),
     path("progress", views.progress, name="tracker_api_progress"),
+    path("activity", views.activity, name="tracker_api_activity"),
     path("scrobble", views.scrobble, name="tracker_api_scrobble"),
     path("undo", views.undo, name="tracker_api_undo"),
 ]
