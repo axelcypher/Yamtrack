@@ -5,7 +5,8 @@ Units per week come from what Yamtrack already stores: watched TV episodes
 and completed movies. Episodes of TV shows linked to an anime entry count as
 anime, and writes mirrored by the anime/TV sync are skipped, so nothing is
 counted twice. A newly created entry counts as one unit, however much
-progress it starts with, so imports do not show up as a binge.
+progress it starts with, and bulk marks of many episodes at once do not
+count, so imports do not show up as a binge.
 """
 
 import datetime
@@ -28,6 +29,7 @@ TOP_GENRES = 10
 # Bigger jumps in one history row are imports or catch-up corrections, not
 # watching; they set a new baseline instead of counting as activity.
 MAX_STEP = 50
+MAX_GAME_STEP = 24 * 60  # minutes
 
 
 def _week(moment):
@@ -45,8 +47,12 @@ def _in_range(moment, start, end):
     )
 
 
-def _history_deltas(model, user, start, end, *, max_step=MAX_STEP, units=True):
-    """(moment, item_id, delta) for every progress increase in the history."""
+def history_increases(model, user, start, end, *, max_step=MAX_STEP, units=True):
+    """(moment, item_id, first, last) for every progress increase in the history.
+
+    ``first`` to ``last`` (inclusive) are the units the row added, e.g. the
+    episode numbers.
+    """
     items = dict(model.objects.filter(user=user).values_list("id", "item_id"))
     if not items:
         return []
@@ -57,10 +63,11 @@ def _history_deltas(model, user, start, end, *, max_step=MAX_STEP, units=True):
             "id", "history_date", "progress", "history_type", "history_change_reason"
         )
     )
-    deltas, previous = [], {}
+    increases, previous = [], {}
     for instance_id, moment, progress, history_type, reason in rows:
-        delta = (progress or 0) - previous.get(instance_id, 0)
-        previous[instance_id] = progress or 0
+        value = progress or 0
+        delta = value - previous.get(instance_id, 0)
+        previous[instance_id] = value
         if units and history_type == "+":
             delta = min(delta, 1)
         if (
@@ -68,24 +75,50 @@ def _history_deltas(model, user, start, end, *, max_step=MAX_STEP, units=True):
             and reason != SYNC_REASON
             and _in_range(moment, start, end)
         ):
-            deltas.append((moment, items[instance_id], delta))
-    return deltas
+            increases.append((moment, items[instance_id], value - delta + 1, value))
+    return increases
+
+
+def history_deltas(model, user, start, end, **options):
+    """(moment, item_id, delta) for every progress increase in the history."""
+    return [
+        (moment, item_id, last - first + 1)
+        for moment, item_id, first, last in history_increases(
+            model, user, start, end, **options
+        )
+    ]
+
+
+def watched_episodes(user, start, end, *fields):
+    """``fields`` of each episode watched in the range.
+
+    Leaves out episodes the anime/TV sync mirrored, and bulk marks: more than
+    ``MAX_STEP`` episodes of one show with the same end date are an import or
+    a "mark all as watched", not watching.
+    """
+    mirrored = Episode.history.model.objects.filter(
+        history_type="+", history_change_reason=SYNC_REASON
+    ).values_list("id", flat=True)
+    episodes = (
+        Episode.objects.filter(related_season__user=user)
+        .exclude(id__in=mirrored)
+        .exclude(end_date=None)
+    )
+    if start:
+        episodes = episodes.filter(end_date__gte=start)
+    if end:
+        episodes = episodes.filter(end_date__lte=end)
+    rows = list(
+        episodes.values_list(*fields, "related_season__related_tv_id", "end_date")
+    )
+    sizes = Counter(row[-2:] for row in rows)
+    return [row[:-2] for row in rows if sizes[row[-2:]] <= MAX_STEP]
 
 
 def _activity(user, start, end):
     """Collect (moment, media type, item id, units, minutes) records."""
     records = []
     linked = set(linked_tv_ids(user))
-    mirrored = Episode.history.model.objects.filter(
-        history_type="+", history_change_reason=SYNC_REASON
-    ).values_list("id", flat=True)
-    episodes = Episode.objects.filter(related_season__user=user).exclude(
-        id__in=mirrored
-    )
-    if start:
-        episodes = episodes.filter(end_date__gte=start)
-    if end:
-        episodes = episodes.filter(end_date__lte=end)
     records.extend(
         (
             moment,
@@ -94,7 +127,10 @@ def _activity(user, start, end):
             1,
             None,
         )
-        for moment, tv_id, item_id in episodes.exclude(end_date=None).values_list(
+        for moment, tv_id, item_id in watched_episodes(
+            user,
+            start,
+            end,
             "end_date",
             "related_season__related_tv_id",
             "related_season__related_tv__item_id",
@@ -106,12 +142,12 @@ def _activity(user, start, end):
     ):
         records.extend(
             (moment, media_type, item_id, delta, None)
-            for moment, item_id, delta in _history_deltas(model, user, start, end)
+            for moment, item_id, delta in history_deltas(model, user, start, end)
         )
     records.extend(
         (moment, MediaTypes.GAME.value, item_id, 0, delta)
-        for moment, item_id, delta in _history_deltas(
-            Game, user, start, end, max_step=24 * 60, units=False
+        for moment, item_id, delta in history_deltas(
+            Game, user, start, end, max_step=MAX_GAME_STEP, units=False
         )
     )
     movies = Movie.objects.filter(user=user, status=Status.COMPLETED.value)

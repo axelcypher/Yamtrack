@@ -136,6 +136,42 @@ class UsageStatsTests(ApiTestCase):
         # The TV episode counts once; the anime progress it mirrored does not.
         self.assertEqual(totals["Anime"], 5)
 
+    def test_bulk_marked_episodes_do_not_count(self, *_mocks):
+        """More than MAX_STEP episodes of one show at the same moment are an import."""
+        from django.utils import timezone  # noqa: PLC0415
+
+        from app.models import Episode, Season  # noqa: PLC0415
+
+        self.seed()
+        season = Season.objects.get(user=self.user)
+
+        def mark(numbers, moment):
+            items = Item.objects.bulk_create(
+                Item(
+                    media_id="1396",
+                    source="tmdb",
+                    media_type="episode",
+                    season_number=1,
+                    episode_number=number,
+                    title="Show",
+                    image="e.jpg",
+                )
+                for number in numbers
+            )
+            Episode.objects.bulk_create(
+                Episode(item=item, related_season=season, end_date=moment)
+                for item in items
+            )
+
+        def tv_units():
+            totals = usage_stats.build(self.user, None, None)["totals"]
+            return {row["label"]: row["units"] for row in totals}["TV Show"]
+
+        mark(range(3, 3 + usage_stats.MAX_STEP + 1), timezone.now())
+        self.assertEqual(tv_units(), 2)
+        mark(range(100, 112), timezone.now())  # one season marked as watched
+        self.assertEqual(tv_units(), 14)
+
     @patch("tracker_api.facts.refresh_item_facts.delay")
     def test_page_renders_and_requests_facts(self, mock_delay, *_mocks):
         """The page renders and asks for missing facts in the background."""
