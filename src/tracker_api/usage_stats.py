@@ -2,8 +2,10 @@
 
 Units per week come from what Yamtrack already stores: watched TV episodes
 (``Episode.end_date``), progress increases in the anime/manga/game history
-and completed movies. TV shows linked to an anime entry count as anime only,
-so synced progress is not counted twice.
+and completed movies. Episodes of TV shows linked to an anime entry count as
+anime, and writes mirrored by the anime/TV sync are skipped, so nothing is
+counted twice. A newly created entry counts as one unit, however much
+progress it starts with, so imports do not show up as a binge.
 """
 
 import datetime
@@ -17,6 +19,7 @@ from app.models import Anime, Episode, Game, Manga, MediaTypes, Movie, Status
 
 from .hooks import linked_tv_ids
 from .models import ItemFacts, UsageEvent
+from .sync import SYNC_REASON
 
 VIDEO_TYPES = (MediaTypes.TV.value, MediaTypes.ANIME.value, MediaTypes.MOVIE.value)
 UNIT_TYPES = (*VIDEO_TYPES, MediaTypes.MANGA.value)
@@ -42,7 +45,7 @@ def _in_range(moment, start, end):
     )
 
 
-def _history_deltas(model, user, start, end, max_step=MAX_STEP):
+def _history_deltas(model, user, start, end, *, max_step=MAX_STEP, units=True):
     """(moment, item_id, delta) for every progress increase in the history."""
     items = dict(model.objects.filter(user=user).values_list("id", "item_id"))
     if not items:
@@ -50,13 +53,21 @@ def _history_deltas(model, user, start, end, max_step=MAX_STEP):
     rows = (
         model.history.model.objects.filter(id__in=items)
         .order_by("id", "history_date")
-        .values_list("id", "history_date", "progress")
+        .values_list(
+            "id", "history_date", "progress", "history_type", "history_change_reason"
+        )
     )
     deltas, previous = [], {}
-    for instance_id, moment, progress in rows:
+    for instance_id, moment, progress, history_type, reason in rows:
         delta = (progress or 0) - previous.get(instance_id, 0)
         previous[instance_id] = progress or 0
-        if 0 < delta <= max_step and _in_range(moment, start, end):
+        if units and history_type == "+":
+            delta = min(delta, 1)
+        if (
+            0 < delta <= max_step
+            and reason != SYNC_REASON
+            and _in_range(moment, start, end)
+        ):
             deltas.append((moment, items[instance_id], delta))
     return deltas
 
@@ -64,18 +75,29 @@ def _history_deltas(model, user, start, end, max_step=MAX_STEP):
 def _activity(user, start, end):
     """Collect (moment, media type, item id, units, minutes) records."""
     records = []
-    hidden = set(linked_tv_ids(user))
+    linked = set(linked_tv_ids(user))
+    mirrored = Episode.history.model.objects.filter(
+        history_type="+", history_change_reason=SYNC_REASON
+    ).values_list("id", flat=True)
     episodes = Episode.objects.filter(related_season__user=user).exclude(
-        related_season__related_tv_id__in=hidden
+        id__in=mirrored
     )
     if start:
         episodes = episodes.filter(end_date__gte=start)
     if end:
         episodes = episodes.filter(end_date__lte=end)
     records.extend(
-        (moment, MediaTypes.TV.value, item_id, 1, None)
-        for moment, item_id in episodes.exclude(end_date=None).values_list(
-            "end_date", "related_season__related_tv__item_id"
+        (
+            moment,
+            MediaTypes.ANIME.value if tv_id in linked else MediaTypes.TV.value,
+            item_id,
+            1,
+            None,
+        )
+        for moment, tv_id, item_id in episodes.exclude(end_date=None).values_list(
+            "end_date",
+            "related_season__related_tv_id",
+            "related_season__related_tv__item_id",
         )
     )
     for media_type, model in (
@@ -89,7 +111,7 @@ def _activity(user, start, end):
     records.extend(
         (moment, MediaTypes.GAME.value, item_id, 0, delta)
         for moment, item_id, delta in _history_deltas(
-            Game, user, start, end, max_step=24 * 60
+            Game, user, start, end, max_step=24 * 60, units=False
         )
     )
     movies = Movie.objects.filter(user=user, status=Status.COMPLETED.value)

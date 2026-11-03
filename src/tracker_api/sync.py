@@ -27,6 +27,8 @@ logger = logging.getLogger(__name__)
 # Upper bound of TV episodes created for one anime in one run.
 MAX_EPISODES_PER_RUN = 300
 RESUMABLE = (Status.PLANNING.value, Status.PAUSED.value, Status.DROPPED.value)
+# History change reason of mirrored writes; the usage statistics skip them.
+SYNC_REASON = "yamtrack-plus sync"
 SNAPSHOT_FIELDS = ("progress", "status", "start_date", "end_date")
 
 _syncing = ContextVar("tracker_api_syncing", default=False)
@@ -73,6 +75,7 @@ def advance_anime(anime, mal_episode, when=None):
         anime.status = Status.IN_PROGRESS.value
         anime.start_date = anime.start_date or when or timezone.now()
     anime.progress = mal_episode
+    anime._change_reason = SYNC_REASON
     anime.save()  # Media.save() completes it at max_progress
     return True
 
@@ -135,11 +138,13 @@ def fill_tv_episodes(links, mapping, mal_id, mal_episodes, when, *, dry_run=Fals
             created += 1
             if dry_run:
                 continue
-            episode = Episode.objects.create(
+            episode = Episode(
                 item=season.get_episode_item(number, metadata),
                 related_season=season,
                 end_date=when,
             )
+            episode._change_reason = SYNC_REASON
+            episode.save()
             _created(episode)
     return created
 

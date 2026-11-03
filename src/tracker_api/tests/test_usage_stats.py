@@ -97,7 +97,7 @@ class UsageStatsTests(ApiTestCase):
         self.assertTrue(stats["chart"]["weeks"])
 
     def test_linked_tv_counts_as_anime(self, *_mocks):
-        """Episodes of a linked show are left to the anime entry."""
+        """Episodes of a linked show count as anime; mirrored writes do not count."""
         self.seed()
         from app.models import TV  # noqa: PLC0415
 
@@ -108,9 +108,33 @@ class UsageStatsTests(ApiTestCase):
             seasons=[1],
         )
         totals = {
-            row["label"] for row in usage_stats.build(self.user, None, None)["totals"]
+            row["label"]: row["units"]
+            for row in usage_stats.build(self.user, None, None)["totals"]
         }
         self.assertNotIn("TV Show", totals)
+        self.assertEqual(totals["Anime"], 4)
+
+        mapping = {
+            "tmdb_show:1396:s1": {"mal:52991": {"1-3": "1-3"}},
+            "mal:52991": {"tmdb_show:1396:s1": {"1-3": "1-3"}},
+        }
+        with patch(
+            "integrations.webhooks.anime_mappings.fetch_mapping_data",
+            return_value=mapping,
+        ):
+            self.watch(
+                media_type="tv",
+                source="tmdb",
+                media_id="1396",
+                season_number=1,
+                unit_number=3,
+            )
+        totals = {
+            row["label"]: row["units"]
+            for row in usage_stats.build(self.user, None, None)["totals"]
+        }
+        # The TV episode counts once; the anime progress it mirrored does not.
+        self.assertEqual(totals["Anime"], 5)
 
     @patch("tracker_api.facts.refresh_item_facts.delay")
     def test_page_renders_and_requests_facts(self, mock_delay, *_mocks):
