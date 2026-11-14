@@ -52,6 +52,7 @@ EXISTING_MEDIA_UPDATE_FIELDS = {
             MediaTypes.BOOK.value,
             MediaTypes.COMIC.value,
             MediaTypes.BOARDGAME.value,
+            MediaTypes.TWITCH.value,
         )
     },
 }

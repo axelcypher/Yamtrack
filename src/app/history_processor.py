@@ -583,6 +583,10 @@ def format_description(field_name, old_value, new_value, media_type=None, user=N
                 return pgettext("history", "Played for %(time)s") % {
                     "time": helpers.minutes_to_hhmm(new_value),
                 }
+            if media_type == MediaTypes.TWITCH.value:
+                return pgettext("history", "Watched for %(time)s") % {
+                    "time": helpers.minutes_to_hhmm(new_value),
+                }
             return INITIAL_PROGRESS_DESCRIPTIONS[activity] % {
                 "unit": config.get_translated_unit(media_type).lower(),
                 "number": new_value,
@@ -635,6 +639,16 @@ def format_description(field_name, old_value, new_value, media_type=None, user=N
                     "time": time,
                 }
             return pgettext("history", "Removed %(time)s of playtime") % {
+                "time": time,
+            }
+
+        if media_type == MediaTypes.TWITCH.value:
+            time = helpers.minutes_to_hhmm(abs(diff))
+            if diff > 0:
+                return pgettext("history", "Added %(time)s of watch time") % {
+                    "time": time,
+                }
+            return pgettext("history", "Removed %(time)s of watch time") % {
                 "time": time,
             }
 

@@ -119,7 +119,7 @@
     <div class="bg-[#2a2f35] rounded-lg p-6">
       <h2 class="text-xl font-semibold mb-4">{% trans "Time per week (hours)" %}</h2>
       <p class="text-sm text-gray-400 mb-4">
-        {% blocktrans with known=facts_known total=facts_total %}Estimated from runtimes ({{ known }} of {{ total }} titles known so far); games use the tracked play time.{% endblocktrans %}
+        {% blocktrans with known=facts_known total=facts_total %}Estimated from runtimes ({{ known }} of {{ total }} titles known so far); games and Twitch use the tracked play and watch time.{% endblocktrans %}
       </p>
       <div class="h-72">
         <canvas id="usage-hours"></canvas>
@@ -135,7 +135,7 @@
       </div>
       <div class="bg-[#2a2f35] rounded-lg p-6">
         <h2 class="text-xl font-semibold mb-4">{% trans "Platforms" %}</h2>
-        <p class="text-sm text-gray-400 mb-4">{% trans "From the browser extension and Castellan." %}</p>
+        <p class="text-sm text-gray-400 mb-4">{% trans "From the browser extension, Castellan and Cavea." %}</p>
         <div class="h-64">
           <canvas id="usage-platforms"></canvas>
         </div>
@@ -147,6 +147,16 @@
         </div>
       </div>
     </div>
+
+    {% if chart.categories %}
+      <div class="bg-[#2a2f35] rounded-lg p-6">
+        <h2 class="text-xl font-semibold mb-4">{% trans "Twitch categories (hours)" %}</h2>
+        <p class="text-sm text-gray-400 mb-4">{% trans "Watch time per stream category, from the clients and the Twitch data export." %}</p>
+        <div class="h-72">
+          <canvas id="usage-categories"></canvas>
+        </div>
+      </div>
+    {% endif %}
   </div>
 {% endblock content %}
 

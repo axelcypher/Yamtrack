@@ -17,13 +17,15 @@ from .resolve import Resolver
 
 # 2: game scrobbling (session minutes), usage data, ``scrobble_types`` in me
 # 3: ``activity`` (progress per item in a date range)
-API_VERSION = 3
+# 4: Twitch watch time (``twitch`` scrobble type, session minutes per channel)
+API_VERSION = 4
 SEARCH_TYPES = (
     MediaTypes.ANIME.value,
     MediaTypes.MANGA.value,
     MediaTypes.TV.value,
     MediaTypes.MOVIE.value,
     MediaTypes.GAME.value,
+    MediaTypes.TWITCH.value,
 )
 
 

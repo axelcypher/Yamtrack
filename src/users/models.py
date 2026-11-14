@@ -306,6 +306,24 @@ class User(AbstractUser):
         choices=MediaStatusChoices,
     )
 
+    # Media type preferences: Twitch channels (yamtrack-plus)
+    twitch_enabled = models.BooleanField(default=True)
+    twitch_layout = models.CharField(
+        max_length=20,
+        default=LayoutChoices.GRID,
+        choices=LayoutChoices,
+    )
+    twitch_sort = models.CharField(
+        max_length=20,
+        default=MediaSortChoices.PROGRESS,
+        choices=MediaSortChoices,
+    )
+    twitch_status = models.CharField(
+        max_length=20,
+        default=MediaStatusChoices.ALL,
+        choices=MediaStatusChoices,
+    )
+
     # UI preferences
     clickable_media_cards = models.BooleanField(
         default=False,
@@ -680,6 +698,7 @@ class User(AbstractUser):
             "steam": "Import from Steam",
             "imdb": "Import from IMDB",
             "goodreads": "Import from GoodReads",
+            "twitch": "Import from Twitch",
         }
 
         # Reverse mapping to get source from task name

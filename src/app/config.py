@@ -65,6 +65,11 @@ COLORS = {
         "background": "bg-lime-400",
         "hex": "#84cc16",
     },
+    "violet": {
+        "text": "text-violet-400",
+        "background": "bg-violet-400",
+        "hex": "#9146ff",
+    },
     "sky": {
         "text": "text-sky-400",
         "background": "bg-sky-400",
@@ -300,6 +305,22 @@ MEDIA_TYPE_CONFIG = {
             "plural": pgettext_lazy("board game progress unit plural", "Plays"),
         },
         "date_key": "year",
+    },
+    # yamtrack-plus: one entry per channel, progress is the watched minutes
+    MediaTypes.TWITCH.value: {
+        "sources": [Sources.TWITCH],
+        "default_source": Sources.TWITCH,
+        "sample_query": "xQc",
+        "unicode_icon": "📡",
+        "verb": {
+            "present": pgettext_lazy("twitch tracking verb present", "watch"),
+            "past": pgettext_lazy("twitch tracking verb past", "watched"),
+        },
+        "activity": "watch",
+        "text_color": COLORS["violet"]["text"],
+        "stats_color": COLORS["violet"]["hex"],
+        "svg_icon": """
+            <path d="M21 2H3v16h5v4l4-4h5l4-4V2zm-10 9V7m5 4V7"/>""",
     },
 }
 

@@ -434,6 +434,18 @@ BGG_API_TOKEN = config(
     ),
 )
 
+# yamtrack-plus: optional Twitch app (https://dev.twitch.tv/console/apps) for
+# channel metadata, channel search and the data export import. Scrobbling
+# Twitch watch time works without it.
+TWITCH_CLIENT_ID = config(
+    "TWITCH_CLIENT_ID",
+    default=secret("TWITCH_CLIENT_ID_FILE", ""),
+)
+TWITCH_CLIENT_SECRET = config(
+    "TWITCH_CLIENT_SECRET",
+    default=secret("TWITCH_CLIENT_SECRET_FILE", ""),
+)
+
 STEAM_API_KEY = config(
     "STEAM_API_KEY",
     default=secret(

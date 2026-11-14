@@ -33,7 +33,11 @@ class CreateEntryViewTests(TestCase):
         self.assertTemplateUsed(response, "app/create_entry.html")
         self.assertIn("media_types", response.context)
 
-        self.assertEqual(response.context["media_types"], MediaTypes.values)
+        # yamtrack-plus: Twitch channels aren't created manually
+        self.assertEqual(
+            response.context["media_types"],
+            [value for value in MediaTypes.values if value != MediaTypes.TWITCH.value],
+        )
 
     def test_create_entry_status_options_are_translated(self):
         """Status options show the translated label and submit the stored value."""

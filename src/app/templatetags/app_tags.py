@@ -75,8 +75,10 @@ def media_detail_label(name):
         "author": lambda: pgettext("media detail", "Author"),
         "authors": lambda: pgettext("media detail", "Authors"),
         "broadcast": lambda: pgettext("media detail", "Broadcast"),
+        "broadcaster_type": lambda: pgettext("media detail", "Broadcaster type"),
         "companies": lambda: pgettext("media detail", "Companies"),
         "country": lambda: pgettext("media detail", "Country"),
+        "created_at": lambda: pgettext("media detail", "Created"),
         "designers": lambda: pgettext("media detail", "Designers"),
         "end_date": lambda: pgettext("media detail", "End date"),
         "episodes": lambda: pgettext("media detail", "Episodes"),
@@ -89,6 +91,7 @@ def media_detail_label(name):
         "last_issue_name": lambda: pgettext("media detail", "Last issue name"),
         "last_issue_number": lambda: pgettext("media detail", "Last issue number"),
         "last_updated": lambda: pgettext("media detail", "Last updated"),
+        "login": lambda: pgettext("media detail", "Login"),
         "latest_chapter_translated": lambda: pgettext(
             "media detail", "Latest chapter translated"
         ),
@@ -266,6 +269,9 @@ def media_type_readable_plural(media_type):
         MediaTypes.COMIC.value: lambda: pgettext("media type plural label", "Comics"),
         MediaTypes.BOARDGAME.value: lambda: pgettext(
             "media type plural label", "Boardgames"
+        ),
+        MediaTypes.TWITCH.value: lambda: pgettext(
+            "media type plural label", "Twitch channels"
         ),
     }
 

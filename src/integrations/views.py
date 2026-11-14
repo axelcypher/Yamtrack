@@ -495,6 +495,27 @@ def import_goodreads(request):
     return redirect("import_data")
 
 
+@require_POST
+def import_twitch(request):
+    """View for importing watch time from the Twitch data export (yamtrack-plus)."""
+    file = request.FILES.get("twitch_export")
+
+    if not file:
+        messages.error(request, _("Twitch data export file is required."))
+        return redirect("import_data")
+
+    tasks.import_twitch.delay(
+        file=file,
+        user_id=request.user.id,
+        mode=request.POST.get("mode", "new"),
+    )
+    messages.info(
+        request,
+        _("The task to import watch time from the Twitch data export has been queued."),
+    )
+    return redirect("import_data")
+
+
 @require_GET
 def export_csv(request):
     """View for exporting all media data to a CSV file."""

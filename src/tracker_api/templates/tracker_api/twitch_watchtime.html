@@ -1,0 +1,24 @@
+{% load i18n app_tags %}
+{% if categories %}
+  <h2 class="text-xl font-bold mb-4">{% trans "Watch time by category" %}</h2>
+  <div class="bg-[#2a2f35] rounded-lg divide-y divide-white/5 mb-6">
+    {% for category in categories %}
+      <div class="flex justify-between gap-x-4 px-4 py-2.5 text-sm">
+        <span class="text-gray-200 truncate">
+          {% if category.name %}
+            {{ category.name }}
+          {% else %}
+            <span class="text-gray-400">{% trans "Unknown category" %}</span>
+          {% endif %}
+        </span>
+        <span class="text-gray-400 shrink-0">{{ category.time }}</span>
+      </div>
+    {% endfor %}
+    {% if last_watched %}
+      <div class="flex justify-between gap-x-4 px-4 py-2.5 text-sm">
+        <span class="text-gray-400">{% trans "Last watched" %}</span>
+        <span class="text-gray-400">{{ last_watched|datetime_format:user }}</span>
+      </div>
+    {% endif %}
+  </div>
+{% endif %}

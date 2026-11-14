@@ -26,8 +26,9 @@ class ApiAuthTests(ApiTestCase):
         response = self.get_json("/api/tracker/v1/me")
         self.assertEqual(response.status_code, 200)
         data = response.json()
-        self.assertEqual(data["api_version"], 3)
+        self.assertEqual(data["api_version"], 4)
         self.assertIn("game", data["scrobble_types"])
+        self.assertIn("twitch", data["scrobble_types"])
         self.assertEqual(data["username"], "tracker")
         self.assertIn("anime", data["enabled_media_types"])
 

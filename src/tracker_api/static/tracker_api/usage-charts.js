@@ -75,4 +75,5 @@ document.addEventListener("DOMContentLoaded", () => {
   }));
   horizontal("usage-platforms", platforms, "value", "#6366f1");
   horizontal("usage-genres", data.genres, "units", "#a855f7");
+  horizontal("usage-categories", data.categories || [], "hours", "#9146ff");
 });

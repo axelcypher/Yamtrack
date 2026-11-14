@@ -3,8 +3,9 @@
 Progress only moves forward: a unit that is already recorded is reported as
 ``already_tracked`` instead of being written twice. Games are scrobbled as
 cumulative minutes per play session; only the difference to what the session
-already reported is added. Every write is captured in a signed undo token so
-the client can revert exactly what it changed.
+already reported is added; Twitch watch time (one entry per channel) works
+the same way. Every write is captured in a signed undo token so the client
+can revert exactly what it changed.
 """
 
 import logging
@@ -27,10 +28,12 @@ from app.models import (
     Movie,
     Season,
     Status,
+    Twitch,
 )
 from app.providers import services
 
 from . import sync
+from . import twitch as twitch_channels
 from .auth import ApiError
 from .models import ScrobbleSession, UsageEvent
 
@@ -51,6 +54,7 @@ MODELS = {
         Manga,
         Movie,
         Game,
+        Twitch,
         ScrobbleSession,
         UsageEvent,
     )
@@ -60,13 +64,17 @@ ENTRY_MODELS = {
     **PROGRESS_MODELS,
     MediaTypes.MOVIE.value: Movie,
     MediaTypes.GAME.value: Game,
+    MediaTypes.TWITCH.value: Twitch,
 }
+# Reported as cumulative minutes per session instead of units.
+SESSION_MODELS = {MediaTypes.GAME.value: Game, MediaTypes.TWITCH.value: Twitch}
 SCROBBLE_TYPES = (
     MediaTypes.TV.value,
     MediaTypes.ANIME.value,
     MediaTypes.MANGA.value,
     MediaTypes.MOVIE.value,
     MediaTypes.GAME.value,
+    MediaTypes.TWITCH.value,
 )
 # Statuses a new report moves back to "In progress".
 RESUMABLE = (Status.PLANNING.value, Status.PAUSED.value, Status.DROPPED.value)
@@ -170,10 +178,14 @@ def scrobble(user, data):
         raise ApiError(400, "invalid_media_type")
     if not source or not media_id:
         raise ApiError(400, "invalid_target", "source and media_id are required")
+    if media_type == MediaTypes.TWITCH.value:
+        twitch_channels.validate_target(source, media_id)
     if media_type not in enabled_scrobble_types(user):
         raise ApiError(403, "media_type_disabled", f"{media_type} is turned off")
-    if media_type not in (MediaTypes.MOVIE.value, MediaTypes.GAME.value) and (
-        unit is None or unit < 1
+    if (
+        media_type != MediaTypes.MOVIE.value
+        and media_type not in SESSION_MODELS
+        and (unit is None or unit < 1)
     ):
         raise ApiError(400, "invalid_unit", "unit_number must be a positive integer")
 
@@ -183,8 +195,10 @@ def scrobble(user, data):
     sink = sync.change_sink.set(changes)
     try:
         with transaction.atomic():
-            if media_type == MediaTypes.GAME.value:
-                applied = _scrobble_game(user, source, media_id, data, usage, changes)
+            if media_type in SESSION_MODELS:
+                applied = _scrobble_session(
+                    user, media_type, source, media_id, data, usage, changes
+                )
             else:
                 item = _scrobble_unit(
                     user,
@@ -203,6 +217,7 @@ def scrobble(user, data):
 
     return {
         "applied": applied,
+        "status": "tracked" if applied else "already_tracked",
         "reason": None if applied else "already_tracked",
         "state": progress_state(user, media_type, source, media_id, season_number),
         "undo": changes.token(user) if applied else None,
@@ -373,8 +388,16 @@ def _scrobble_movie(user, source, media_id, changes):
     return item
 
 
-def _scrobble_game(user, source, media_id, data, usage, changes):
-    """Add the minutes a play session reported since its last report."""
+def _session_item(media_type, source, media_id, data):
+    """Item a session reports on: an IGDB game or a Twitch channel."""
+    if media_type == MediaTypes.TWITCH.value:
+        return twitch_channels.channel_item(media_id, data.get("channel"))
+    metadata = services.get_media_metadata(media_type, media_id, source)
+    return _get_or_create_item(media_type, source, media_id, metadata)
+
+
+def _scrobble_session(user, media_type, source, media_id, data, usage, changes):  # noqa: PLR0917
+    """Add the minutes a play or watch session reported since its last report."""
     session_id = _text(data.get("session_id"), 64)
     minutes = _int(data.get("minutes"))
     if not session_id:
@@ -384,9 +407,9 @@ def _scrobble_game(user, source, media_id, data, usage, changes):
     started_at = _datetime(data.get("started_at"), "started_at")
     ended_at = _datetime(data.get("ended_at"), "ended_at")
     client = _text(data.get("client") or usage.get("client"), 32)
+    platform = _text(data.get("platform") or usage.get("platform"), 64)
 
-    metadata = services.get_media_metadata(MediaTypes.GAME.value, media_id, source)
-    item = _get_or_create_item(MediaTypes.GAME.value, source, media_id, metadata)
+    item = _session_item(media_type, source, media_id, data)
 
     session = (
         ScrobbleSession.objects.select_for_update()
@@ -394,7 +417,9 @@ def _scrobble_game(user, source, media_id, data, usage, changes):
         .first()
     )
     if session and session.item_id != item.id:
-        raise ApiError(400, "session_conflict", "session_id belongs to another game")
+        raise ApiError(
+            400, "session_conflict", f"session_id belongs to another {media_type}"
+        )
     delta = minutes - (session.minutes_counted if session else 0)
     if delta <= 0:
         return False
@@ -419,33 +444,40 @@ def _scrobble_game(user, source, media_id, data, usage, changes):
         )
         changes.add_created(session)
 
-    game = Game.objects.filter(item=item, user=user).order_by("-created_at").first()
-    if game:
-        changes.add_updated(game, _snapshot(game, MEDIA_FIELDS))
-        if game.status in RESUMABLE:
-            game.status = Status.IN_PROGRESS.value
-            game.start_date = game.start_date or started_at or _now()
-        game.progress += delta
-        game.save()
+    model = SESSION_MODELS[media_type]
+    entry = model.objects.filter(item=item, user=user).order_by("-created_at").first()
+    if entry:
+        changes.add_updated(entry, _snapshot(entry, MEDIA_FIELDS))
+        if entry.status in RESUMABLE:
+            entry.status = Status.IN_PROGRESS.value
+            entry.start_date = entry.start_date or started_at or _now()
+        entry.progress += delta
+        entry.save()
     else:
-        game = Game.objects.create(
+        entry = model.objects.create(
             item=item,
             user=user,
             progress=delta,
             status=Status.IN_PROGRESS.value,
             start_date=started_at or _now(),
         )
-        changes.add_created(game)
+        changes.add_created(entry)
 
+    category = (
+        twitch_channels.parse_category(data.get("category"))
+        if media_type == MediaTypes.TWITCH.value
+        else ("", "")
+    )
     _record_usage(
         user,
         item,
-        MediaTypes.GAME.value,
-        {**usage, "client": client, "minutes": delta},
+        media_type,
+        {**usage, "client": client, "platform": platform, "minutes": delta},
         changes,
         units=0,
         occurred_at=ended_at,
         session_id=session_id,
+        category=category,
     )
     return True
 
@@ -460,9 +492,11 @@ def _record_usage(  # noqa: PLR0913
     units,
     occurred_at=None,
     session_id="",
+    category=("", ""),
 ):
     """Store one usage event for the statistics (client, platform, minutes)."""
     minutes = _int(usage.get("minutes")) or 0
+    category_id, category_name = category
     event = UsageEvent.objects.create(
         user=user,
         item=item,
@@ -473,6 +507,8 @@ def _record_usage(  # noqa: PLR0913
         minutes=max(0, min(minutes, MAX_USAGE_MINUTES)),
         occurred_at=occurred_at or timezone.now(),
         session_id=session_id,
+        category_id=category_id,
+        category_name=category_name,
     )
     changes.add_created(event)
 

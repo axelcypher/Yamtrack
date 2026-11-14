@@ -84,6 +84,32 @@ Steam import requires a Steam API key and your Steam ID 64.
 - **Steam ID 64**: Instead of your Steam username, you must provide your Steam ID 64. You can find it on your Steam account details page under your username.
 - **Profile Visibility**: Your Steam profile must be public if the API key you are using is not linked to the Steam ID you are requesting.
 
+## Twitch data export (yamtrack-plus)
+
+Imports your Twitch watch time once, as history. Request your data on twitch.tv
+(Settings, Security and Privacy, "Download your data") and upload the zip
+archive, or just its `request/site_history/minute_watched.csv`.
+
+- Both known layouts of `minute_watched.csv` are read: the per-minute rows
+  (`time`/`time_utc`, `channel`, `channel_id`, `minutes_logged`, `game`,
+  `platform`, ...) and the daily rows (`day`, `channel_name`,
+  `minutes_watched_unadjusted`, `platform`, `player`, `game_name`,
+  `content_mode`).
+- Minutes are summed per channel, day, category and platform. Each sum becomes
+  a usage event with its category (shown in the usage statistics and on the
+  channel page) and is added to the channel's Twitch entry.
+- Only watching **before your first Twitch session tracked by a client**
+  (Cavea or the browser extension) is imported, so nothing is counted twice.
+  Rows that only carry a day are imported when the day lies before the day of
+  that first session.
+- Importing again replaces what the previous Twitch import added. The import
+  mode (new/overwrite) makes no difference.
+- Rows of the daily layout only name the channel login. Logins are matched to
+  channels you already track; to look up other channels, set
+  `TWITCH_CLIENT_ID` and `TWITCH_CLIENT_SECRET` (a Twitch app from
+  <https://dev.twitch.tv/console/apps>). Channels that can't be resolved are
+  listed in the import result.
+
 ## Yamtrack CSV format
 
 Use this format to bulk-import media into YamTrack. Every row represents a single media instance.

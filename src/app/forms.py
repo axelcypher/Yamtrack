@@ -21,6 +21,7 @@ from app.models import (
     Movie,
     Season,
     Sources,
+    Twitch,
 )
 
 
@@ -356,6 +357,21 @@ class BoardgameForm(MediaForm):
                 ),
             ),
         }
+
+
+class TwitchForm(MediaForm):
+    """Form for Twitch channels (yamtrack-plus); progress is the watch time."""
+
+    progress = CustomDurationField(
+        required=False,
+        widget=forms.TextInput(attrs={"placeholder": "hh:mm"}),
+        label=_("Progress (Time Watched)"),
+    )
+
+    class Meta(MediaForm.Meta):
+        """Bind form to model."""
+
+        model = Twitch
 
 
 class TvForm(MediaForm):

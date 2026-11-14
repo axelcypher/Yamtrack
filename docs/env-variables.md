@@ -18,6 +18,8 @@ This page outlines the environment variables used in the YamTrack project.
 | `IGDB_NSFW`     | Default to `False`. Set to `True` to include adult content in game searches.                                                                                                                                                                          |
 | `HARDCOVER_API` | Hardcover API key for books. A default key is provided, but it's recommended to get your own as it has a low rate limit. Custom values must include the `Bearer ` prefix.                                                                              |
 | `COMICVINE_API` | ComicVine API key for comics. A default key is provided, but it's recommended to get your own as it has a low rate limit.                                                                                                                             |
+| `TWITCH_CLIENT_ID` | yamtrack-plus: optional client ID of a Twitch app for channel metadata, channel search and resolving channel names in the Twitch data export import. Twitch scrobbling works without it. |
+| `TWITCH_CLIENT_SECRET` | yamtrack-plus: optional client secret of that Twitch app. |
 
 !!! warning "AniList"
 
@@ -133,6 +135,8 @@ YamTrack supports reading sensitive configuration values from Docker secrets fil
 | `IGDB_SECRET`             | `IGDB_SECRET_FILE`             |
 | `HARDCOVER_API`           | `HARDCOVER_API_FILE`           |
 | `COMICVINE_API`           | `COMICVINE_API_FILE`           |
+| `TWITCH_CLIENT_ID`        | `TWITCH_CLIENT_ID_FILE`        |
+| `TWITCH_CLIENT_SECRET`    | `TWITCH_CLIENT_SECRET_FILE`    |
 | `TRAKT_API`               | `TRAKT_API_FILE`               |
 | `SIMKL_ID`                | `SIMKL_ID_FILE`                |
 | `SIMKL_SECRET`            | `SIMKL_SECRET_FILE`            |

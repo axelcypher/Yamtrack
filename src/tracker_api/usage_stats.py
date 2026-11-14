@@ -7,6 +7,11 @@ anime, and writes mirrored by the anime/TV sync are skipped, so nothing is
 counted twice. A newly created entry counts as one unit, however much
 progress it starts with, and bulk marks of many episodes at once do not
 count, so imports do not show up as a binge.
+
+Twitch watch time comes from the usage events instead of the progress
+history: scrobbles and the data export import both write one event per slice
+with its real time and stream category, while the progress of a channel only
+holds the total. Manual progress edits of a channel therefore don't count.
 """
 
 import datetime
@@ -24,8 +29,11 @@ from .sync import SYNC_REASON
 
 VIDEO_TYPES = (MediaTypes.TV.value, MediaTypes.ANIME.value, MediaTypes.MOVIE.value)
 UNIT_TYPES = (*VIDEO_TYPES, MediaTypes.MANGA.value)
+# Types counted in minutes only, not units.
+TIME_TYPES = (MediaTypes.GAME.value, MediaTypes.TWITCH.value)
 MAX_WEEKS = 260
 TOP_GENRES = 10
+TOP_CATEGORIES = 10
 # Bigger jumps in one history row are imports or catch-up corrections, not
 # watching; they set a new baseline instead of counting as activity.
 MAX_STEP = 50
@@ -89,6 +97,39 @@ def history_deltas(model, user, start, end, **options):
     ]
 
 
+def usage_events(user, start, end, media_type=None):
+    """Return the usage events in the range, optionally of one media type."""
+    events = UsageEvent.objects.filter(user=user)
+    if media_type:
+        events = events.filter(media_type=media_type)
+    if start:
+        events = events.filter(occurred_at__gte=start)
+    if end:
+        events = events.filter(occurred_at__lte=end)
+    return events
+
+
+def twitch_minutes(user, start, end):
+    """(moment, item_id, minutes) for every Twitch usage event in the range."""
+    return list(
+        usage_events(user, start, end, MediaTypes.TWITCH.value)
+        .filter(minutes__gt=0)
+        .values_list("occurred_at", "item_id", "minutes")
+    )
+
+
+def twitch_categories(user, start, end, limit=TOP_CATEGORIES):
+    """Twitch watch time per stream category, the largest first."""
+    rows = (
+        usage_events(user, start, end, MediaTypes.TWITCH.value)
+        .exclude(category_name="")
+        .values("category_name")
+        .annotate(minutes=Sum("minutes"))
+        .order_by("-minutes", "category_name")[:limit]
+    )
+    return [{"label": row["category_name"], "minutes": row["minutes"]} for row in rows]
+
+
 def watched_episodes(user, start, end, *fields):
     """``fields`` of each episode watched in the range.
 
@@ -149,6 +190,10 @@ def _activity(user, start, end):
         for moment, item_id, delta in history_deltas(
             Game, user, start, end, max_step=MAX_GAME_STEP, units=False
         )
+    )
+    records.extend(
+        (moment, MediaTypes.TWITCH.value, item_id, 0, minutes)
+        for moment, item_id, minutes in twitch_minutes(user, start, end)
     )
     movies = Movie.objects.filter(user=user, status=Status.COMPLETED.value)
     records.extend(
@@ -222,11 +267,7 @@ def build(user, start, end):
             if any(series[media_type])
         ]
 
-    usage = UsageEvent.objects.filter(user=user)
-    if start:
-        usage = usage.filter(occurred_at__gte=start)
-    if end:
-        usage = usage.filter(occurred_at__lte=end)
+    usage = usage_events(user, start, end)
     platforms = [
         {
             "label": row["platform"] or row["client"] or "?",
@@ -243,7 +284,7 @@ def build(user, start, end):
         "chart": {
             "weeks": [week.isoformat() for week in weeks],
             "units": datasets(units, UNIT_TYPES),
-            "hours": datasets(hours, (*VIDEO_TYPES, MediaTypes.GAME.value)),
+            "hours": datasets(hours, (*VIDEO_TYPES, *TIME_TYPES)),
             "split": {
                 "labels": [_label(t) for t in UNIT_TYPES if totals[t]],
                 "data": [totals[t] for t in UNIT_TYPES if totals[t]],
@@ -254,6 +295,10 @@ def build(user, start, end):
                 {"label": genre, "units": count}
                 for genre, count in genre_units.most_common(TOP_GENRES)
             ],
+            "categories": [
+                {"label": row["label"], "hours": round(row["minutes"] / 60, 1)}
+                for row in twitch_categories(user, start, end)
+            ],
         },
         "totals": [
             {
@@ -262,7 +307,7 @@ def build(user, start, end):
                 "hours": round(minutes_total[media_type] / 60),
                 "color": _color(media_type),
             }
-            for media_type in (*UNIT_TYPES, MediaTypes.GAME.value)
+            for media_type in (*UNIT_TYPES, *TIME_TYPES)
             if totals[media_type] or minutes_total[media_type]
         ],
         "facts_known": len(item_ids & set(facts)),

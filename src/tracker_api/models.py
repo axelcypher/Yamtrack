@@ -39,7 +39,9 @@ class UsageEvent(models.Model):
     """One recorded unit of media use, for the usage statistics.
 
     Written for every applied scrobble: an episode or chapter (``units=1``)
-    with the watch time if the client knows it, or a slice of play time.
+    with the watch time if the client knows it, or a slice of play or Twitch
+    watch time. The Twitch data export import writes them too (client
+    ``twitch-export``).
     """
 
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
@@ -51,6 +53,9 @@ class UsageEvent(models.Model):
     minutes = models.PositiveIntegerField(default=0)
     occurred_at = models.DateTimeField()
     session_id = models.CharField(max_length=64, blank=True, default="")
+    # Twitch: the stream category (game) the minutes were watched in
+    category_id = models.CharField(max_length=32, blank=True, default="")
+    category_name = models.CharField(max_length=255, blank=True, default="")
 
     class Meta:
         """Meta options for the model."""
@@ -61,6 +66,22 @@ class UsageEvent(models.Model):
     def __str__(self):
         """Return what was used and when."""
         return f"{self.item} on {self.platform or self.client} at {self.occurred_at}"
+
+
+class TwitchChannel(models.Model):
+    """Login of a Twitch channel item; the item's media_id is the channel id.
+
+    Logins can change, ids cannot. The login links to the channel page and
+    maps the channel names of the Twitch data export to items.
+    """
+
+    item = models.OneToOneField(Item, on_delete=models.CASCADE, related_name="+")
+    login = models.CharField(max_length=64, db_index=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        """Return the login and item."""
+        return f"{self.login} ({self.item})"
 
 
 class AnimeTvLink(models.Model):
