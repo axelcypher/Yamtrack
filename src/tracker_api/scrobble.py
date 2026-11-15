@@ -389,15 +389,27 @@ def _scrobble_movie(user, source, media_id, changes):
     return item
 
 
-def _session_item(media_type, source, media_id, data):
+def _session_item(user, media_type, source, media_id, data):
     """Item a session reports on: a game (IGDB or manual) or a Twitch channel."""
     if media_type == MediaTypes.TWITCH.value:
         return twitch_channels.channel_item(media_id, data.get("channel"))
     if source == Sources.MANUAL.value:
-        # Manual items exist only in Yamtrack; never create one from a report.
-        item = Item.objects.filter(
-            media_type=media_type, source=source, media_id=media_id
-        ).first()
+        # Manual items exist only in Yamtrack and belong to whoever created
+        # them, which shows as the user's own entry for the item (as in the
+        # manual parent search of the web UI). Never create one from a report,
+        # and never let a known UUID reach another user's item.
+        model = SESSION_MODELS[media_type]
+        entry = (
+            model.objects.filter(
+                user=user,
+                item__media_type=media_type,
+                item__source=source,
+                item__media_id=media_id,
+            )
+            .select_related("item")
+            .first()
+        )
+        item = entry.item if entry else None
         if item is None:
             raise ApiError(404, "not_found", "no manual entry with this media_id")
         return item
@@ -418,7 +430,7 @@ def _scrobble_session(user, media_type, source, media_id, data, usage, changes):
     client = _text(data.get("client") or usage.get("client"), 32)
     platform = _text(data.get("platform") or usage.get("platform"), 64)
 
-    item = _session_item(media_type, source, media_id, data)
+    item = _session_item(user, media_type, source, media_id, data)
 
     session = (
         ScrobbleSession.objects.select_for_update()

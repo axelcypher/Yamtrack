@@ -1,5 +1,7 @@
 from unittest.mock import patch
 
+from django.contrib.auth import get_user_model
+
 from app.models import Game, Item, MediaTypes, Sources, Status
 from tracker_api.models import UsageEvent
 
@@ -40,6 +42,17 @@ class ManualGameScrobbleTests(ApiTestCase):
             title="World of Warcraft: Forever",
             image="",
         )
+        # Creating a manual game in the web UI also creates the user's entry.
+        self.entry = Game.objects.bulk_create(
+            [
+                Game(
+                    item=self.item,
+                    user=self.user,
+                    progress=0,
+                    status=Status.PLANNING.value,
+                )
+            ]
+        )[0]
 
     def scrobble(self, data, status=200):
         """Post a scrobble and return the JSON response."""
@@ -47,8 +60,8 @@ class ManualGameScrobbleTests(ApiTestCase):
         self.assertEqual(response.status_code, status, response.content)
         return response.json()
 
-    def test_first_report_creates_entry(self, _reload):
-        """The first session creates the entry on the existing manual item."""
+    def test_first_report_updates_entry(self, _reload):
+        """The first session counts on the user's entry for the manual item."""
         result = self.scrobble(report("m1", 42))
         self.assertTrue(result["applied"])
         self.assertEqual(result["state"]["progress"], 42)
@@ -59,15 +72,8 @@ class ManualGameScrobbleTests(ApiTestCase):
 
     def test_cumulative_minutes_and_existing_entry(self, _reload):
         """Later reports add only the difference to an existing entry."""
-        Game.objects.bulk_create(
-            [
-                Game(
-                    item=self.item,
-                    user=self.user,
-                    progress=100,
-                    status=Status.PAUSED.value,
-                )
-            ]
+        Game.objects.filter(pk=self.entry.pk).update(
+            progress=100, status=Status.PAUSED.value
         )
         self.scrobble(report("m1", 30))
         result = self.scrobble(report("m1", 45))
@@ -97,13 +103,28 @@ class ManualGameScrobbleTests(ApiTestCase):
             status=404,
         )
         self.assertEqual(result["error"], "not_found")
-        self.assertFalse(Game.objects.exists())
+        self.assertEqual(Game.objects.get(user=self.user).progress, 0)
+        self.assertFalse(UsageEvent.objects.exists())
+
+    def test_other_users_manual_item(self, _reload):
+        """A manual UUID of another user's game is a 404 for everyone else."""
+        other = get_user_model().objects.create_user(
+            username="other",
+            password="12345",  # noqa: S106
+        )
+        Game.objects.filter(pk=self.entry.pk).update(user=other)
+        result = self.scrobble(report("m1", 10), status=404)
+        self.assertEqual(result["error"], "not_found")
+        self.assertFalse(Game.objects.filter(user=self.user).exists())
+        self.assertEqual(Game.objects.get(user=other).progress, 0)
         self.assertFalse(UsageEvent.objects.exists())
 
     def test_undo(self, _reload):
-        """Undo removes the entry again but keeps the manual item."""
+        """Undo restores the entry and keeps the manual item."""
         result = self.scrobble(report("m1", 42))
         response = self.post_json("/api/tracker/v1/undo", {"undo": result["undo"]})
         self.assertEqual(response.status_code, 200, response.content)
-        self.assertFalse(Game.objects.exists())
+        game = Game.objects.get(user=self.user)
+        self.assertEqual(game.progress, 0)
+        self.assertEqual(game.status, Status.PLANNING.value)
         self.assertTrue(Item.objects.filter(media_id=MANUAL_ID).exists())
