@@ -1,9 +1,14 @@
+import datetime
 from unittest.mock import patch
 
 from app.models import Game, Item, MediaTypes, Sources, Status
 from app.providers.services import ProviderAPIError
 
 from .helpers import ApiTestCase
+
+# Explicit, so the order does not depend on the clock resolution.
+OLDER = datetime.datetime(2026, 1, 1, tzinfo=datetime.UTC)
+NEWER = datetime.datetime(2026, 2, 1, tzinfo=datetime.UTC)
 
 
 def _igdb_page(*games, total_pages=1):
@@ -65,6 +70,10 @@ class GameSearchTests(ApiTestCase):
                 )
             ]
         )
+
+        # created_at is auto_now_add, so it can only be set afterwards.
+        Game.objects.filter(item=hades).update(created_at=OLDER)
+        Game.objects.filter(item=homebrew).update(created_at=NEWER)
 
     def search(self, query, **params):
         """Run a game search as the test user."""

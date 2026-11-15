@@ -128,7 +128,7 @@ def _library_matches(user, media_type, query):
             item__title__icontains=query,
         )
         .select_related("item")
-        .order_by("-created_at")
+        .order_by("-created_at", "-id")
     )
     matches = {}
     for row in rows:

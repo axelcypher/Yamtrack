@@ -23,12 +23,15 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v7
         with:
-          fetch-depth: 0 # git describe needs the tags
+          fetch-depth: 1
 
-      - name: Get version from git
+      # The fork carries no git tags, so its SemVer lives in PLUS_VERSION
+      # (minor for features, patch for fixes) and is shown as "<version>-plus".
+      - name: Get version from PLUS_VERSION
         id: get-version
         run: |
-          VERSION="$(git describe --tags 2>/dev/null || echo dev)-plus"
+          VERSION="$(tr -d '[:space:]' < PLUS_VERSION 2>/dev/null || true)"
+          VERSION="${VERSION:-dev}-plus"
           echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
           echo "Using version: $VERSION"
 
@@ -46,6 +49,7 @@ jobs:
           tags: |
             type=raw,value=plus
             type=sha,prefix=plus-
+            type=raw,value=${{ steps.get-version.outputs.VERSION }}
 
       - name: Log into registry ${{ env.REGISTRY }}
         uses: docker/login-action@v4

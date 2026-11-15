@@ -27,6 +27,7 @@ from app.models import (
     MediaTypes,
     Movie,
     Season,
+    Sources,
     Status,
     Twitch,
 )
@@ -389,9 +390,17 @@ def _scrobble_movie(user, source, media_id, changes):
 
 
 def _session_item(media_type, source, media_id, data):
-    """Item a session reports on: an IGDB game or a Twitch channel."""
+    """Item a session reports on: a game (IGDB or manual) or a Twitch channel."""
     if media_type == MediaTypes.TWITCH.value:
         return twitch_channels.channel_item(media_id, data.get("channel"))
+    if source == Sources.MANUAL.value:
+        # Manual items exist only in Yamtrack; never create one from a report.
+        item = Item.objects.filter(
+            media_type=media_type, source=source, media_id=media_id
+        ).first()
+        if item is None:
+            raise ApiError(404, "not_found", "no manual entry with this media_id")
+        return item
     metadata = services.get_media_metadata(media_type, media_id, source)
     return _get_or_create_item(media_type, source, media_id, metadata)
 
