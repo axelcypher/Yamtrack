@@ -8,20 +8,23 @@ counted twice. A newly created entry counts as one unit, however much
 progress it starts with, and bulk marks of many episodes at once do not
 count, so imports do not show up as a binge.
 
-Twitch watch time comes from the usage events instead of the progress
-history: scrobbles and the data export import both write one event per slice
-with its real time and stream category, while the progress of a channel only
-holds the total. Manual progress edits of a channel therefore don't count.
+Twitch and YouTube watch time come from the usage events instead of the
+progress history: scrobbles (and the Twitch data export import) write one
+event per slice with its real time and stream category or video, while the
+progress of a channel only holds the total. Manual progress edits of a
+channel therefore don't count.
 """
 
 import datetime
 from collections import Counter, defaultdict
 
-from django.db.models import Count, Sum
+from django.db.models import Count, Max, Sum
 from django.utils import timezone
 
 from app import config
+from app.helpers import minutes_to_hhmm
 from app.models import Anime, Episode, Game, Manga, MediaTypes, Movie, Status
+from app.providers.youtube import video_url
 
 from .hooks import linked_tv_ids
 from .models import ItemFacts, UsageEvent
@@ -30,10 +33,14 @@ from .sync import SYNC_REASON
 VIDEO_TYPES = (MediaTypes.TV.value, MediaTypes.ANIME.value, MediaTypes.MOVIE.value)
 UNIT_TYPES = (*VIDEO_TYPES, MediaTypes.MANGA.value)
 # Types counted in minutes only, not units.
-TIME_TYPES = (MediaTypes.GAME.value, MediaTypes.TWITCH.value)
+TIME_TYPES = (MediaTypes.GAME.value, MediaTypes.TWITCH.value, MediaTypes.YOUTUBE.value)
+# Types whose minutes come from the usage events, not the progress history.
+EVENT_TYPES = (MediaTypes.TWITCH.value, MediaTypes.YOUTUBE.value)
 MAX_WEEKS = 260
 TOP_GENRES = 10
 TOP_CATEGORIES = 10
+TOP_CHANNELS = 10
+TOP_VIDEOS = 10
 # Bigger jumps in one history row are imports or catch-up corrections, not
 # watching; they set a new baseline instead of counting as activity.
 MAX_STEP = 50
@@ -109,13 +116,52 @@ def usage_events(user, start, end, media_type=None):
     return events
 
 
-def twitch_minutes(user, start, end):
-    """(moment, item_id, minutes) for every Twitch usage event in the range."""
+def event_minutes(user, start, end, media_type):
+    """(moment, item_id, minutes) for every usage event of a type in the range."""
     return list(
-        usage_events(user, start, end, MediaTypes.TWITCH.value)
+        usage_events(user, start, end, media_type)
         .filter(minutes__gt=0)
         .values_list("occurred_at", "item_id", "minutes")
     )
+
+
+def channel_minutes(user, start, end, media_type, limit=TOP_CHANNELS):
+    """Watch time per channel (item) from the usage events, the largest first."""
+    rows = (
+        usage_events(user, start, end, media_type)
+        .filter(minutes__gt=0)
+        .values("item_id", "item__title")
+        .annotate(minutes=Sum("minutes"))
+        .order_by("-minutes", "item__title")[:limit]
+    )
+    return [{"label": row["item__title"], "minutes": row["minutes"]} for row in rows]
+
+
+def top_videos(events, limit=TOP_VIDEOS):
+    """YouTube videos of the usage events with the most watch time."""
+    rows = (
+        events.exclude(video_id="")
+        .filter(minutes__gt=0)
+        .values("video_id")
+        .annotate(
+            minutes=Sum("minutes"),
+            title=Max("video_title"),
+            channel=Max("item__title"),
+            last=Max("occurred_at"),
+        )
+        .order_by("-minutes", "-last", "video_id")[:limit]
+    )
+    return [
+        {
+            "id": row["video_id"],
+            "title": row["title"],
+            "channel": row["channel"],
+            "minutes": row["minutes"],
+            "time": minutes_to_hhmm(row["minutes"]),
+            "url": video_url(row["video_id"]),
+        }
+        for row in rows
+    ]
 
 
 def twitch_categories(user, start, end, limit=TOP_CATEGORIES):
@@ -191,10 +237,11 @@ def _activity(user, start, end):
             Game, user, start, end, max_step=MAX_GAME_STEP, units=False
         )
     )
-    records.extend(
-        (moment, MediaTypes.TWITCH.value, item_id, 0, minutes)
-        for moment, item_id, minutes in twitch_minutes(user, start, end)
-    )
+    for media_type in EVENT_TYPES:
+        records.extend(
+            (moment, media_type, item_id, 0, minutes)
+            for moment, item_id, minutes in event_minutes(user, start, end, media_type)
+        )
     movies = Movie.objects.filter(user=user, status=Status.COMPLETED.value)
     records.extend(
         (moment, MediaTypes.MOVIE.value, item_id, 1, None)
@@ -236,6 +283,7 @@ def build(user, start, end):
 
     units = defaultdict(lambda: [0] * len(weeks))
     hours = defaultdict(lambda: [0.0] * len(weeks))
+    weekly_minutes = defaultdict(lambda: [0] * len(weeks))
     totals = Counter()
     minutes_total = Counter()
     genre_units = Counter()
@@ -255,6 +303,7 @@ def build(user, start, end):
             continue
         units[media_type][position] += count
         hours[media_type][position] += (minutes or 0) / 60
+        weekly_minutes[media_type][position] += minutes or 0
 
     def datasets(series, types):
         return [
@@ -299,7 +348,14 @@ def build(user, start, end):
                 {"label": row["label"], "hours": round(row["minutes"] / 60, 1)}
                 for row in twitch_categories(user, start, end)
             ],
+            "youtube": {
+                "channels": channel_minutes(user, start, end, MediaTypes.YOUTUBE.value),
+                "weeks": datasets(weekly_minutes, (MediaTypes.YOUTUBE.value,)),
+            },
         },
+        "youtube_videos": top_videos(
+            usage_events(user, start, end, MediaTypes.YOUTUBE.value)
+        ),
         "totals": [
             {
                 "label": _label(media_type),

@@ -583,7 +583,7 @@ def format_description(field_name, old_value, new_value, media_type=None, user=N
                 return pgettext("history", "Played for %(time)s") % {
                     "time": helpers.minutes_to_hhmm(new_value),
                 }
-            if media_type == MediaTypes.TWITCH.value:
+            if media_type in (MediaTypes.TWITCH.value, MediaTypes.YOUTUBE.value):
                 return pgettext("history", "Watched for %(time)s") % {
                     "time": helpers.minutes_to_hhmm(new_value),
                 }
@@ -642,7 +642,7 @@ def format_description(field_name, old_value, new_value, media_type=None, user=N
                 "time": time,
             }
 
-        if media_type == MediaTypes.TWITCH.value:
+        if media_type in (MediaTypes.TWITCH.value, MediaTypes.YOUTUBE.value):
             time = helpers.minutes_to_hhmm(abs(diff))
             if diff > 0:
                 return pgettext("history", "Added %(time)s of watch time") % {

@@ -76,6 +76,7 @@ def media_detail_label(name):
         "authors": lambda: pgettext("media detail", "Authors"),
         "broadcast": lambda: pgettext("media detail", "Broadcast"),
         "broadcaster_type": lambda: pgettext("media detail", "Broadcaster type"),
+        "channel_id": lambda: pgettext("media detail", "Channel ID"),
         "companies": lambda: pgettext("media detail", "Companies"),
         "country": lambda: pgettext("media detail", "Country"),
         "created_at": lambda: pgettext("media detail", "Created"),
@@ -272,6 +273,9 @@ def media_type_readable_plural(media_type):
         ),
         MediaTypes.TWITCH.value: lambda: pgettext(
             "media type plural label", "Twitch channels"
+        ),
+        MediaTypes.YOUTUBE.value: lambda: pgettext(
+            "media type plural label", "YouTube channels"
         ),
     }
 

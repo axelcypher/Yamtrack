@@ -50,6 +50,7 @@ class Sources(models.TextChoices):
     COMICVINE = "comicvine", "Comic Vine"
     BGG = "bgg", "BoardGameGeek"
     TWITCH = "twitch", "Twitch"
+    YOUTUBE = "youtube", "YouTube"
     MANUAL = "manual", _("Manual")
 
 
@@ -67,6 +68,7 @@ class MediaTypes(models.TextChoices):
     COMIC = "comic", _("Comic")
     BOARDGAME = "boardgame", _("Boardgame")
     TWITCH = "twitch", _("Twitch")
+    YOUTUBE = "youtube", _("YouTube")
 
 
 class Item(CalendarTriggerMixin, models.Model):
@@ -186,8 +188,8 @@ class Item(CalendarTriggerMixin, models.Model):
         if self._disable_calendar_triggers:
             return
 
-        # yamtrack-plus: Twitch channels have no releases
-        if self.media_type == MediaTypes.TWITCH.value:
+        # yamtrack-plus: Twitch and YouTube channels have no releases
+        if self.media_type in (MediaTypes.TWITCH.value, MediaTypes.YOUTUBE.value):
             return
 
         if self.media_type == MediaTypes.SEASON.value:
@@ -1968,6 +1970,29 @@ class BoardGame(Media):
 
 class Twitch(Media):
     """Model for Twitch channels (yamtrack-plus); progress is watched minutes."""
+
+    tracker = FieldTracker()
+
+    @property
+    def formatted_progress(self):
+        """Return progress in hours:minutes format."""
+        return app.helpers.minutes_to_hhmm(self.progress)
+
+    def increase_progress(self):
+        """Increase the watch time by 30 minutes."""
+        self.progress += 30
+        self.save()
+        logger.info("Changed watch time of %s to %s", self, self.formatted_progress)
+
+    def decrease_progress(self):
+        """Decrease the watch time by 30 minutes."""
+        self.progress -= 30
+        self.save()
+        logger.info("Changed watch time of %s to %s", self, self.formatted_progress)
+
+
+class YouTube(Media):
+    """Model for YouTube channels (yamtrack-plus); progress is watched minutes."""
 
     tracker = FieldTracker()
 

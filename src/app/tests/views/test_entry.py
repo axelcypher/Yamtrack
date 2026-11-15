@@ -33,10 +33,14 @@ class CreateEntryViewTests(TestCase):
         self.assertTemplateUsed(response, "app/create_entry.html")
         self.assertIn("media_types", response.context)
 
-        # yamtrack-plus: Twitch channels aren't created manually
+        # yamtrack-plus: Twitch and YouTube channels aren't created manually
         self.assertEqual(
             response.context["media_types"],
-            [value for value in MediaTypes.values if value != MediaTypes.TWITCH.value],
+            [
+                value
+                for value in MediaTypes.values
+                if value not in (MediaTypes.TWITCH.value, MediaTypes.YOUTUBE.value)
+            ],
         )
 
     def test_create_entry_status_options_are_translated(self):

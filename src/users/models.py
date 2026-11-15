@@ -324,6 +324,24 @@ class User(AbstractUser):
         choices=MediaStatusChoices,
     )
 
+    # Media type preferences: YouTube channels (yamtrack-plus)
+    youtube_enabled = models.BooleanField(default=True)
+    youtube_layout = models.CharField(
+        max_length=20,
+        default=LayoutChoices.GRID,
+        choices=LayoutChoices,
+    )
+    youtube_sort = models.CharField(
+        max_length=20,
+        default=MediaSortChoices.PROGRESS,
+        choices=MediaSortChoices,
+    )
+    youtube_status = models.CharField(
+        max_length=20,
+        default=MediaStatusChoices.ALL,
+        choices=MediaStatusChoices,
+    )
+
     # UI preferences
     clickable_media_cards = models.BooleanField(
         default=False,

@@ -15,8 +15,14 @@ def get_items_to_process(user=None):
     media_types = [
         choice.value
         for choice in MediaTypes
-        # yamtrack-plus: Twitch channels have no releases
-        if choice not in [MediaTypes.SEASON, MediaTypes.EPISODE, MediaTypes.TWITCH]
+        # yamtrack-plus: Twitch and YouTube channels have no releases
+        if choice
+        not in [
+            MediaTypes.SEASON,
+            MediaTypes.EPISODE,
+            MediaTypes.TWITCH,
+            MediaTypes.YOUTUBE,
+        ]
     ]
 
     query = Q()

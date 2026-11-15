@@ -110,6 +110,14 @@ archive, or just its `request/site_history/minute_watched.csv`.
   <https://dev.twitch.tv/console/apps>). Channels that can't be resolved are
   listed in the import result.
 
+## YouTube (yamtrack-plus)
+
+There is no YouTube import: the Google Takeout watch history lists the videos
+you opened, but not how long you watched them. YouTube watch time is tracked
+per channel by the browser extension (yamtrack-tracker) from the moment it is
+installed. No YouTube API key is needed; channel names and avatars come from
+the extension, and the channel search only finds channels you have watched.
+
 ## Yamtrack CSV format
 
 Use this format to bulk-import media into YamTrack. Every row represents a single media instance.

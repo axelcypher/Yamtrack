@@ -4,9 +4,9 @@ Games count played minutes, anime watched episodes and manga read chapters,
 taken from the progress history the same way as the usage statistics: imports
 and catch-up jumps do not count, and neither do writes mirrored by the
 anime/TV sync. Episodes of a TV season linked to an anime count for that anime
-in MAL numbering, so an episode tracked on both sides counts once. Twitch
-channels count watched minutes from the usage events (scrobbles and the data
-export import), like the usage statistics.
+in MAL numbering, so an episode tracked on both sides counts once. Twitch and
+YouTube channels count watched minutes from the usage events (scrobbles and
+the Twitch data export import), like the usage statistics.
 """
 
 from collections import Counter, defaultdict
@@ -23,6 +23,7 @@ UNITS = {
     MediaTypes.ANIME.value: "episodes",
     MediaTypes.MANGA.value: "chapters",
     MediaTypes.TWITCH.value: "minutes",
+    MediaTypes.YOUTUBE.value: "minutes",
 }
 
 
@@ -94,7 +95,13 @@ def _manga_chapters(user, start, end):
 
 
 def _twitch_minutes(user, start, end):
-    return _summed(usage_stats.twitch_minutes(user, start, end))
+    return _summed(usage_stats.event_minutes(user, start, end, MediaTypes.TWITCH.value))
+
+
+def _youtube_minutes(user, start, end):
+    return _summed(
+        usage_stats.event_minutes(user, start, end, MediaTypes.YOUTUBE.value)
+    )
 
 
 AMOUNTS = {
@@ -102,6 +109,7 @@ AMOUNTS = {
     MediaTypes.ANIME.value: _anime_episodes,
     MediaTypes.MANGA.value: _manga_chapters,
     MediaTypes.TWITCH.value: _twitch_minutes,
+    MediaTypes.YOUTUBE.value: _youtube_minutes,
 }
 
 

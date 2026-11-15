@@ -70,7 +70,11 @@ def generate_rows(user):
                 getattr(media, field, "") for field in fields["track"]
             ]
 
-            if media_type in (MediaTypes.GAME.value, MediaTypes.TWITCH.value):
+            if media_type in (
+                MediaTypes.GAME.value,
+                MediaTypes.TWITCH.value,
+                MediaTypes.YOUTUBE.value,
+            ):
                 # calculate index of progress field
                 progress_index = fields["track"].index("progress")
                 row[progress_index + len(fields["item"])] = helpers.minutes_to_hhmm(

@@ -3,9 +3,9 @@
 Progress only moves forward: a unit that is already recorded is reported as
 ``already_tracked`` instead of being written twice. Games are scrobbled as
 cumulative minutes per play session; only the difference to what the session
-already reported is added; Twitch watch time (one entry per channel) works
-the same way. Every write is captured in a signed undo token so the client
-can revert exactly what it changed.
+already reported is added; Twitch and YouTube watch time (one entry per
+channel) work the same way. Every write is captured in a signed undo token so
+the client can revert exactly what it changed.
 """
 
 import logging
@@ -30,11 +30,13 @@ from app.models import (
     Sources,
     Status,
     Twitch,
+    YouTube,
 )
 from app.providers import services
 
 from . import sync
 from . import twitch as twitch_channels
+from . import youtube as youtube_channels
 from .auth import ApiError
 from .models import ScrobbleSession, UsageEvent
 
@@ -56,6 +58,7 @@ MODELS = {
         Movie,
         Game,
         Twitch,
+        YouTube,
         ScrobbleSession,
         UsageEvent,
     )
@@ -66,9 +69,14 @@ ENTRY_MODELS = {
     MediaTypes.MOVIE.value: Movie,
     MediaTypes.GAME.value: Game,
     MediaTypes.TWITCH.value: Twitch,
+    MediaTypes.YOUTUBE.value: YouTube,
 }
 # Reported as cumulative minutes per session instead of units.
-SESSION_MODELS = {MediaTypes.GAME.value: Game, MediaTypes.TWITCH.value: Twitch}
+SESSION_MODELS = {
+    MediaTypes.GAME.value: Game,
+    MediaTypes.TWITCH.value: Twitch,
+    MediaTypes.YOUTUBE.value: YouTube,
+}
 SCROBBLE_TYPES = (
     MediaTypes.TV.value,
     MediaTypes.ANIME.value,
@@ -76,7 +84,13 @@ SCROBBLE_TYPES = (
     MediaTypes.MOVIE.value,
     MediaTypes.GAME.value,
     MediaTypes.TWITCH.value,
+    MediaTypes.YOUTUBE.value,
 )
+# Channels check their own source and id format.
+TARGET_VALIDATORS = {
+    MediaTypes.TWITCH.value: twitch_channels.validate_target,
+    MediaTypes.YOUTUBE.value: youtube_channels.validate_target,
+}
 # Statuses a new report moves back to "In progress".
 RESUMABLE = (Status.PLANNING.value, Status.PAUSED.value, Status.DROPPED.value)
 MAX_USAGE_MINUTES = 24 * 60
@@ -179,8 +193,8 @@ def scrobble(user, data):
         raise ApiError(400, "invalid_media_type")
     if not source or not media_id:
         raise ApiError(400, "invalid_target", "source and media_id are required")
-    if media_type == MediaTypes.TWITCH.value:
-        twitch_channels.validate_target(source, media_id)
+    if media_type in TARGET_VALIDATORS:
+        TARGET_VALIDATORS[media_type](source, media_id)
     if media_type not in enabled_scrobble_types(user):
         raise ApiError(403, "media_type_disabled", f"{media_type} is turned off")
     if (
@@ -390,9 +404,11 @@ def _scrobble_movie(user, source, media_id, changes):
 
 
 def _session_item(user, media_type, source, media_id, data):
-    """Item a session reports on: a game (IGDB or manual) or a Twitch channel."""
+    """Item a session reports on: a game (IGDB or manual) or a channel."""
     if media_type == MediaTypes.TWITCH.value:
         return twitch_channels.channel_item(media_id, data.get("channel"))
+    if media_type == MediaTypes.YOUTUBE.value:
+        return youtube_channels.channel_item(media_id, data.get("channel"))
     if source == Sources.MANUAL.value:
         # Manual items exist only in Yamtrack and belong to whoever created
         # them, which shows as the user's own entry for the item (as in the
@@ -489,6 +505,11 @@ def _scrobble_session(user, media_type, source, media_id, data, usage, changes):
         if media_type == MediaTypes.TWITCH.value
         else ("", "")
     )
+    video = (
+        youtube_channels.parse_video(data.get("video"))
+        if media_type == MediaTypes.YOUTUBE.value
+        else ("", "")
+    )
     _record_usage(
         user,
         item,
@@ -499,6 +520,7 @@ def _scrobble_session(user, media_type, source, media_id, data, usage, changes):
         occurred_at=ended_at,
         session_id=session_id,
         category=category,
+        video=video,
     )
     return True
 
@@ -514,10 +536,12 @@ def _record_usage(  # noqa: PLR0913
     occurred_at=None,
     session_id="",
     category=("", ""),
+    video=("", ""),
 ):
     """Store one usage event for the statistics (client, platform, minutes)."""
     minutes = _int(usage.get("minutes")) or 0
     category_id, category_name = category
+    video_id, video_title = video
     event = UsageEvent.objects.create(
         user=user,
         item=item,
@@ -530,6 +554,8 @@ def _record_usage(  # noqa: PLR0913
         session_id=session_id,
         category_id=category_id,
         category_name=category_name,
+        video_id=video_id,
+        video_title=video_title,
     )
     changes.add_created(event)
 

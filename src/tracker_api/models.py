@@ -39,8 +39,8 @@ class UsageEvent(models.Model):
     """One recorded unit of media use, for the usage statistics.
 
     Written for every applied scrobble: an episode or chapter (``units=1``)
-    with the watch time if the client knows it, or a slice of play or Twitch
-    watch time. The Twitch data export import writes them too (client
+    with the watch time if the client knows it, or a slice of play, Twitch or
+    YouTube watch time. The Twitch data export import writes them too (client
     ``twitch-export``).
     """
 
@@ -56,6 +56,9 @@ class UsageEvent(models.Model):
     # Twitch: the stream category (game) the minutes were watched in
     category_id = models.CharField(max_length=32, blank=True, default="")
     category_name = models.CharField(max_length=255, blank=True, default="")
+    # YouTube: the video the minutes were watched on
+    video_id = models.CharField(max_length=16, blank=True, default="")
+    video_title = models.CharField(max_length=255, blank=True, default="")
 
     class Meta:
         """Meta options for the model."""

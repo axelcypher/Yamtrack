@@ -21,7 +21,8 @@ logger = logging.getLogger(__name__)
 # 2: game scrobbling (session minutes), usage data, ``scrobble_types`` in me
 # 3: ``activity`` (progress per item in a date range)
 # 4: Twitch watch time (``twitch`` scrobble type, session minutes per channel)
-API_VERSION = 4
+# 5: YouTube watch time (``youtube`` scrobble type, session minutes per channel)
+API_VERSION = 5
 SEARCH_TYPES = (
     MediaTypes.ANIME.value,
     MediaTypes.MANGA.value,
@@ -29,6 +30,7 @@ SEARCH_TYPES = (
     MediaTypes.MOVIE.value,
     MediaTypes.GAME.value,
     MediaTypes.TWITCH.value,
+    MediaTypes.YOUTUBE.value,
 )
 # Searched in the user's own library first, so manually created entries,
 # which no provider knows, are found too.

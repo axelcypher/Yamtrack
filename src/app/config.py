@@ -70,6 +70,11 @@ COLORS = {
         "background": "bg-violet-400",
         "hex": "#9146ff",
     },
+    "crimson": {
+        "text": "text-red-500",
+        "background": "bg-red-500",
+        "hex": "#ff0000",
+    },
     "sky": {
         "text": "text-sky-400",
         "background": "bg-sky-400",
@@ -321,6 +326,25 @@ MEDIA_TYPE_CONFIG = {
         "stats_color": COLORS["violet"]["hex"],
         "svg_icon": """
             <path d="M21 2H3v16h5v4l4-4h5l4-4V2zm-10 9V7m5 4V7"/>""",
+    },
+    # yamtrack-plus: one entry per channel, progress is the watched minutes
+    MediaTypes.YOUTUBE.value: {
+        "sources": [Sources.YOUTUBE],
+        "default_source": Sources.YOUTUBE,
+        "sample_query": "Kurzgesagt",
+        "unicode_icon": "▶️",
+        "verb": {
+            "present": pgettext_lazy("youtube tracking verb present", "watch"),
+            "past": pgettext_lazy("youtube tracking verb past", "watched"),
+        },
+        "activity": "watch",
+        "text_color": COLORS["crimson"]["text"],
+        "stats_color": COLORS["crimson"]["hex"],
+        "svg_icon": """
+            <path d="M2.5 17a24.12 24.12 0 0 1 0-10 2 2 0 0 1 1.4-1.4
+            49.56 49.56 0 0 1 16.2 0A2 2 0 0 1 21.5 7a24.12 24.12 0 0 1 0
+            10 2 2 0 0 1-1.4 1.4 49.55 49.55 0 0 1-16.2 0A2 2 0 0 1 2.5 17"/>
+            <path d="m10 15 5-3-5-3z"/>""",
     },
 }
 
