@@ -136,6 +136,7 @@ class AppTagsTests(TestCase):
             MediaTypes.COMIC.value: "Comics",
             MediaTypes.BOARDGAME.value: "Boardgames",
             MediaTypes.TWITCH.value: "Twitch channels",
+            MediaTypes.YOUTUBE.value: "YouTube channels",
         }
 
         for media_type, _label in MediaTypes.choices:
@@ -188,6 +189,7 @@ class AppTagsTests(TestCase):
             MediaTypes.COMIC.value: ("comic", "read", "read"),
             MediaTypes.BOARDGAME.value: ("board game", "play", "played"),
             MediaTypes.TWITCH.value: ("twitch", "watch", "watched"),
+            MediaTypes.YOUTUBE.value: ("youtube", "watch", "watched"),
         }
         self.assertEqual(set(verb_contexts), set(MediaTypes.values))
 

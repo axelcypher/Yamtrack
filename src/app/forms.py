@@ -22,6 +22,7 @@ from app.models import (
     Season,
     Sources,
     Twitch,
+    YouTube,
 )
 
 
@@ -372,6 +373,24 @@ class TwitchForm(MediaForm):
         """Bind form to model."""
 
         model = Twitch
+
+
+class YoutubeForm(MediaForm):
+    """Form for YouTube channels (yamtrack-plus); progress is the watch time.
+
+    Named after ``get_form_class``, which capitalizes the media type.
+    """
+
+    progress = CustomDurationField(
+        required=False,
+        widget=forms.TextInput(attrs={"placeholder": "hh:mm"}),
+        label=_("Progress (Time Watched)"),
+    )
+
+    class Meta(MediaForm.Meta):
+        """Bind form to model."""
+
+        model = YouTube
 
 
 class TvForm(MediaForm):

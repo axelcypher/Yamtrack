@@ -1,0 +1,27 @@
+{% load i18n app_tags %}
+{% if videos %}
+  <h2 class="text-xl font-bold mb-4">{% trans "Most watched videos" %}</h2>
+  <div class="bg-[#2a2f35] rounded-lg divide-y divide-white/5 mb-6">
+    {% for video in videos %}
+      <div class="flex justify-between gap-x-4 px-4 py-2.5 text-sm">
+        <a href="{{ video.url }}"
+           target="_blank"
+           rel="noopener noreferrer"
+           class="text-gray-200 hover:text-indigo-400 truncate">
+          {% if video.title %}
+            {{ video.title }}
+          {% else %}
+            <span class="text-gray-400">{{ video.id }}</span>
+          {% endif %}
+        </a>
+        <span class="text-gray-400 shrink-0">{{ video.time }}</span>
+      </div>
+    {% endfor %}
+    {% if last_watched %}
+      <div class="flex justify-between gap-x-4 px-4 py-2.5 text-sm">
+        <span class="text-gray-400">{% trans "Last watched" %}</span>
+        <span class="text-gray-400">{{ last_watched|datetime_format:user }}</span>
+      </div>
+    {% endif %}
+  </div>
+{% endif %}

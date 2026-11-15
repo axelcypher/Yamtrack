@@ -305,6 +305,7 @@
         {% load tracker_tags %}
         {% linked_entry media %}
         {% twitch_watchtime media %}
+        {% youtube_watchtime media %}
 
         {# Actions #}
         <h2 class="text-xl font-bold mb-4">{% trans "Actions" %}</h2>
@@ -514,7 +515,7 @@
                   {% if media.media_type != MediaTypes.MOVIE.value %}
                     <p class="text-xs text-gray-400 mt-1">
                       {{ user_media.formatted_progress }}
-                      {% if media.media_type != MediaTypes.GAME.value and media.media_type != MediaTypes.TWITCH.value %}
+                      {% if media.media_type != MediaTypes.GAME.value and media.media_type != MediaTypes.TWITCH.value and media.media_type != MediaTypes.YOUTUBE.value %}
                         {{ media_type|unit_for_count:user_media.progress|lower }}
                       {% endif %}
                     </p>

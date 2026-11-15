@@ -170,7 +170,7 @@ class TwitchScrobbleTests(ApiTestCase):
         me = self.get_json("/api/tracker/v1/me").json()
         self.assertIn("twitch", me["scrobble_types"])
         self.assertIn("twitch", me["enabled_media_types"])
-        self.assertEqual(me["api_version"], 4)
+        self.assertEqual(me["api_version"], 5)
 
     def test_validation(self, _calendar):
         """Session, minutes, source and a numeric channel id are required."""

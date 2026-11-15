@@ -599,7 +599,11 @@ def track_modal(
 
     if media:
         title = media.item
-        if media_type in (MediaTypes.GAME.value, MediaTypes.TWITCH.value):
+        if media_type in (
+            MediaTypes.GAME.value,
+            MediaTypes.TWITCH.value,
+            MediaTypes.YOUTUBE.value,
+        ):
             initial_data["progress"] = helpers.minutes_to_hhmm(media.progress)
     else:
         title = services.get_media_metadata(
@@ -763,9 +767,11 @@ def episode_save(request):
 def create_entry(request):
     """Return the form for manually adding media items."""
     if request.method == "GET":
-        # yamtrack-plus: Twitch channels come from the clients, not manual entries
+        # yamtrack-plus: Twitch/YouTube channels come from the clients, not manually
         media_types = [
-            value for value in MediaTypes.values if value != MediaTypes.TWITCH.value
+            value
+            for value in MediaTypes.values
+            if value not in (MediaTypes.TWITCH.value, MediaTypes.YOUTUBE.value)
         ]
         return render(request, "app/create_entry.html", {"media_types": media_types})
 

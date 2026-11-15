@@ -23,6 +23,7 @@ from app.providers import (
     openlibrary,
     tmdb,
     twitch,
+    youtube,
 )
 
 logger = logging.getLogger(__name__)
@@ -271,6 +272,7 @@ def get_media_metadata(
         MediaTypes.COMIC.value: lambda: comicvine.comic(media_id),
         MediaTypes.BOARDGAME.value: lambda: bgg.boardgame(media_id),
         MediaTypes.TWITCH.value: lambda: twitch.channel(media_id),
+        MediaTypes.YOUTUBE.value: lambda: youtube.channel(media_id),
     }
     return metadata_retrievers[media_type]()
 
@@ -319,5 +321,6 @@ def search(media_type, query, page, source=None, *, show_adult_titles=True):
         MediaTypes.COMIC.value: lambda: comicvine.search(query, page),
         MediaTypes.BOARDGAME.value: lambda: bgg.search(query, page),
         MediaTypes.TWITCH.value: lambda: twitch.search(query, page),
+        MediaTypes.YOUTUBE.value: lambda: youtube.search(query, page),
     }
     return search_handlers[media_type]()

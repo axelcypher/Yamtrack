@@ -5,6 +5,7 @@ from app.helpers import minutes_to_hhmm
 from app.models import MediaTypes
 from tracker_api.links import links_for_media
 from tracker_api.models import UsageEvent
+from tracker_api.usage_stats import top_videos
 
 register = template.Library()
 
@@ -56,6 +57,30 @@ def twitch_watchtime(context, media):
             for row in rows
             if row["minutes"]
         ],
+        "last_watched": events.aggregate(last=Max("occurred_at"))["last"],
+        "user": request.user,
+    }
+
+
+@register.inclusion_tag("tracker_api/youtube_watchtime.html", takes_context=True)
+def youtube_watchtime(context, media):
+    """Show the user's most watched videos on a YouTube channel page."""
+    request = context.get("request")
+    if (
+        not request
+        or not request.user.is_authenticated
+        or not isinstance(media, dict)
+        or media.get("media_type") != MediaTypes.YOUTUBE.value
+    ):
+        return {"videos": []}
+    events = UsageEvent.objects.filter(
+        user=request.user,
+        media_type=MediaTypes.YOUTUBE.value,
+        item__source=media.get("source"),
+        item__media_id=media.get("media_id"),
+    )
+    return {
+        "videos": top_videos(events),
         "last_watched": events.aggregate(last=Max("occurred_at"))["last"],
         "user": request.user,
     }

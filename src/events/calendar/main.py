@@ -42,7 +42,8 @@ def process_items(items_to_process):
     anime_to_process = []
 
     for item in items_to_process:
-        if item.media_type == MediaTypes.TWITCH.value:  # yamtrack-plus: no releases
+        # yamtrack-plus: Twitch and YouTube channels have no releases
+        if item.media_type in (MediaTypes.TWITCH.value, MediaTypes.YOUTUBE.value):
             continue
         if item.media_type == MediaTypes.ANIME.value:
             anime_to_process.append(item)

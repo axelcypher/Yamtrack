@@ -390,8 +390,12 @@ def _consumed_value(media_type, queryset, item_count):
     else:
         value = queryset.aggregate(total=models.Sum("progress"))["total"] or 0
 
-    if media_type in (MediaTypes.GAME.value, MediaTypes.TWITCH.value):
-        # ``progress`` is stored in minutes for games and Twitch channels.
+    if media_type in (
+        MediaTypes.GAME.value,
+        MediaTypes.TWITCH.value,
+        MediaTypes.YOUTUBE.value,
+    ):
+        # ``progress`` is stored in minutes for games, Twitch and YouTube channels.
         value = round(value / 60)
 
     return value or None
@@ -429,6 +433,9 @@ CONSUMPTION_DESCRIPTORS = {
     ),
     MediaTypes.TWITCH.value: lambda n: npgettext(
         "consumption statistic", "Twitch hour watched", "Twitch hours watched", n
+    ),
+    MediaTypes.YOUTUBE.value: lambda n: npgettext(
+        "consumption statistic", "YouTube hour watched", "YouTube hours watched", n
     ),
 }
 

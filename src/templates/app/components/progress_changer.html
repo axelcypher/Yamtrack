@@ -16,7 +16,7 @@
   <div class="text-xs text-indigo-400 font-medium min-w-[4ch] text-center">
     {{ media.formatted_progress }}
 
-    {% if media.item.media_type != MediaTypes.GAME.value and media.item.media_type != MediaTypes.MOVIE.value and media.item.media_type != MediaTypes.TWITCH.value %}
+    {% if media.item.media_type != MediaTypes.GAME.value and media.item.media_type != MediaTypes.MOVIE.value and media.item.media_type != MediaTypes.TWITCH.value and media.item.media_type != MediaTypes.YOUTUBE.value %}
       {% if media.max_progress %}
         / {{ media.max_progress }} {{ media.item.media_type|unit_for_count:media.max_progress }}
       {% else %}

@@ -56,6 +56,10 @@ SOURCES_CONFIG = {
         "name": "Twitch",
         "logo": static("img/twitch-logo.svg"),
     },
+    "youtube": {
+        "name": "YouTube",
+        "logo": static("img/youtube-logo.svg"),
+    },
 }
 
 
