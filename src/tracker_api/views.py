@@ -1,6 +1,7 @@
 """JSON endpoints used by the yamtrack-tracker browser extension."""
 
 import datetime
+import logging
 
 from django.apps import apps
 from django.http import JsonResponse
@@ -15,6 +16,8 @@ from . import scrobble as scrobble_service
 from .auth import ApiError, api_view, json_body
 from .resolve import Resolver
 
+logger = logging.getLogger(__name__)
+
 # 2: game scrobbling (session minutes), usage data, ``scrobble_types`` in me
 # 3: ``activity`` (progress per item in a date range)
 # 4: Twitch watch time (``twitch`` scrobble type, session minutes per channel)
@@ -27,6 +30,10 @@ SEARCH_TYPES = (
     MediaTypes.GAME.value,
     MediaTypes.TWITCH.value,
 )
+# Searched in the user's own library first, so manually created entries,
+# which no provider knows, are found too.
+LIBRARY_SEARCH_TYPES = (MediaTypes.GAME.value,)
+LIBRARY_SEARCH_LIMIT = 20
 
 
 @api_view(["GET"])
@@ -58,16 +65,85 @@ def search(request):
     except ValueError:
         page = 1
 
-    data = services.search(
-        media_type,
-        query,
-        page,
-        show_adult_titles=request.user.show_adult_titles,
+    if media_type not in LIBRARY_SEARCH_TYPES:
+        data = services.search(
+            media_type,
+            query,
+            page,
+            show_adult_titles=request.user.show_adult_titles,
+        )
+        results = _with_user_entries(request.user, media_type, data["results"])
+        return JsonResponse(
+            {
+                "page": data["page"],
+                "total_pages": data["total_pages"],
+                "results": results,
+            }
+        )
+
+    library = _library_matches(request.user, media_type, query) if page == 1 else []
+    try:
+        data = services.search(
+            media_type,
+            query,
+            page,
+            show_adult_titles=request.user.show_adult_titles,
+        )
+    except services.ProviderAPIError as error:
+        # Own entries are still worth showing when the provider is down or
+        # not configured; without any, report the provider error as before.
+        if not library:
+            raise
+        logger.warning("Provider search failed, library results only: %s", error)
+        data = {"page": page, "total_pages": 1, "results": []}
+
+    seen = {(result["source"], str(result["media_id"])) for result in library}
+    provider_results = [
+        result
+        for result in data["results"]
+        if (result["source"], str(result["media_id"])) not in seen
+    ]
+    results = _with_user_entries(
+        request.user, media_type, [*library, *provider_results]
     )
-    results = _with_user_entries(request.user, media_type, data["results"])
     return JsonResponse(
-        {"page": data["page"], "total_pages": data["total_pages"], "results": results}
+        {
+            "page": data["page"],
+            "total_pages": max(data["total_pages"], 1 if library else 0),
+            "results": results,
+        }
     )
+
+
+def _library_matches(user, media_type, query):
+    """Return the user's entries whose title contains the query, newest first.
+
+    Covers every source, including manually created entries.
+    """
+    model = apps.get_model(app_label="app", model_name=media_type)
+    rows = (
+        model.objects.filter(
+            user=user,
+            item__media_type=media_type,
+            item__title__icontains=query,
+        )
+        .select_related("item")
+        .order_by("-created_at")
+    )
+    matches = {}
+    for row in rows:
+        key = (row.item.source, row.item.media_id)
+        if key not in matches:
+            matches[key] = {
+                "media_id": row.item.media_id,
+                "source": row.item.source,
+                "media_type": media_type,
+                "title": row.item.title,
+                "image": row.item.image,
+            }
+        if len(matches) >= LIBRARY_SEARCH_LIMIT:
+            break
+    return list(matches.values())
 
 
 def _with_user_entries(user, media_type, results):
@@ -92,6 +168,7 @@ def _with_user_entries(user, media_type, results):
             {
                 **result,
                 "media_id": str(result["media_id"]),
+                "in_library": entry is not None,
                 "user_status": entry.status if entry else None,
                 # TV progress is computed across seasons; not worth it in a list.
                 "user_progress": entry.progress
