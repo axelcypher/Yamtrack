@@ -135,8 +135,8 @@ class AppTagsTests(TestCase):
             MediaTypes.BOOK.value: "Books",
             MediaTypes.COMIC.value: "Comics",
             MediaTypes.BOARDGAME.value: "Boardgames",
-            MediaTypes.TWITCH.value: "Twitch channels",
-            MediaTypes.YOUTUBE.value: "YouTube channels",
+            MediaTypes.TWITCH.value: "Twitch",
+            MediaTypes.YOUTUBE.value: "YouTube",
         }
 
         for media_type, _label in MediaTypes.choices:

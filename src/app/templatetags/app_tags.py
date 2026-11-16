@@ -271,11 +271,9 @@ def media_type_readable_plural(media_type):
         MediaTypes.BOARDGAME.value: lambda: pgettext(
             "media type plural label", "Boardgames"
         ),
-        MediaTypes.TWITCH.value: lambda: pgettext(
-            "media type plural label", "Twitch channels"
-        ),
+        MediaTypes.TWITCH.value: lambda: pgettext("media type plural label", "Twitch"),
         MediaTypes.YOUTUBE.value: lambda: pgettext(
-            "media type plural label", "YouTube channels"
+            "media type plural label", "YouTube"
         ),
     }
 
